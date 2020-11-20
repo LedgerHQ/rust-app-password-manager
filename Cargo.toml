@@ -1,0 +1,33 @@
+[package]
+name = "nanopass"
+version = "1.0.0"
+authors = ["yhql", "Olivier Hériveaux"]
+edition = "2018"
+build = "build.rs"
+
+[build-dependencies]
+cc = "1.0"
+bindgen = "0.55.1"
+
+[dependencies]
+nanos_sdk = { git = "https://github.com/LedgerHQ/ledger-nanos-sdk.git" }
+nanos_ui = { git = "https://github.com/LedgerHQ/ledger-nanos-ui.git" }
+cty = "0.2.0"
+heapless = "0.5.6"
+
+[dependencies.block-modes]
+version = "0.7.0"
+default-features = false
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"
+opt-level = 's' 
+lto = true
+
+[package.metadata.nanos]
+curve = "secp256k1"
+flags = "0"
+icon = "crab.gif"
