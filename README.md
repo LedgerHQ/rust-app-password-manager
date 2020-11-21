@@ -28,7 +28,7 @@ You can build on either Windows or Linux with a simple `cargo build` or
 You can use
 [cargo-ledger](https://github.com/ledgerhq/cargo-ledger) which
 builds, outputs a `hex` file and a manifest file for `ledgerctl`, and loads it
-on a device in a single `cargo nanos load` command in your app directory.
+on a device in a single `cargo ledger load` command in your app directory.
 
 ## License
 
