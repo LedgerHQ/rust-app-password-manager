@@ -345,11 +345,9 @@ fn export(
     let mut iter = passwords.into_iter();
     let mut next_item = iter.next();
     while next_item.is_some() {
-        ui::SingleMessage::new("Exporting A").show();
         match comm.next_command() {
             // Fetch next password
             0x08 => {
-                ui::SingleMessage::new("Exporting X").show();
                 let password = next_item.unwrap();
                 // If encryption is enabled, encrypt the buffer inplace.
                 if encrypted {
