@@ -45,12 +45,19 @@ class Client:
         app_name = "nanopass".encode()
         self.dev.cla = 0xe0
         try:
+            # Due to current limitation, app won't reply to this APDU and an
+            # OSError is thrown as the USB device disconnects. Handle it
+            # silently.
+            # This needs to be improved
             self.dev.apdu_exchange(0xd8, app_name)
         finally:
             self.dev.cla = 0x80
 
     def quit_app(self):
-        self.dev.apdu_exchange(0x0c)
+        try:
+            self.dev.apdu_exchange(0x0c)
+        except OSError as e:
+            pass
 
     def get_version(self) -> str:
         """ :return: App version string """
@@ -241,7 +248,7 @@ def open_(ctx):
 @click.pass_context
 def quit(ctx):
     dev = ctx.obj['DEV']
-    dev.quit()
+    dev.quit_app()
 
 
 if __name__ == '__main__':
