@@ -120,7 +120,6 @@ class Client:
         """
         name_bytes = str_to_bytes_pad(name, MAX_NAME_LEN)
         self.dev.apdu_exchange(0x06, name_bytes)
-        r = self.dev.exchange(apdu)
 
     def export(self, encrypt: bool=True) -> List[bytes]:
         """
