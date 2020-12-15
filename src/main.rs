@@ -36,7 +36,7 @@ nanos_sdk::set_panic!(nanos_sdk::exiting_panic);
 #[no_mangle]
 #[link_section = ".nvm_data"]
 /// Stores all passwords in Non-Volatile Memory
-static mut PASSWORDS: PIC<nvm::Collection<PasswordItem, 64>> =
+static mut PASSWORDS: PIC<nvm::Collection<PasswordItem, 128>> =
     PIC::new(nvm::Collection::new(PasswordItem::new()));
 
 /// Possible characters for the randomly generated passwords
@@ -246,7 +246,7 @@ fn generate_random_password(dest: &mut [u8], size: usize) {
 ///   Null terminated.
 /// * `pass` - New password. If None, a password is generated automatically.
 fn set_password(
-    passwords: &mut nvm::Collection<PasswordItem, 64>,
+    passwords: &mut nvm::Collection<PasswordItem, 128>,
     name: &ArrayString<32>,
     pass: &Option<ArrayString<32>>,
 ) -> Result<(), Error> {
@@ -308,7 +308,7 @@ fn set_password(
 /// * `enc_key` - Encryption key. If None, passwords are exported in plaintext.
 fn export(
     comm: &mut io::Comm,
-    passwords: &nvm::Collection<PasswordItem, 64>,
+    passwords: &nvm::Collection<PasswordItem, 128>,
     enc_key: Option<&[u8; 32]>,
 ) {
     // Ask user confirmation
@@ -407,7 +407,7 @@ fn export(
 /// * `enc_key` - Encryption key. If None, passwords are imported as plaintext.
 fn import(
     comm: &mut io::Comm,
-    passwords: &mut nvm::Collection<PasswordItem, 64>,
+    passwords: &mut nvm::Collection<PasswordItem, 128>,
     enc_key: Option<&[u8; 32]>,
 ) {
     let encrypted = enc_key.is_some();
