@@ -14,14 +14,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ledgerblue.commTCP import getDongle as getDongleTCP
-from ledgerblue.comm import getDongle
 from random import getrandbits as rnd
 from binascii import hexlify, unhexlify
 import click
 import binascii
 import json
 from typing import Optional, List
+import ledgerwallet.client
 
 MAX_NAME_LEN = 32
 MAX_PASS_LEN = 32
@@ -40,27 +39,28 @@ class Client:
         :param dev: Instance which implements the communication with the device.
         """
         self.dev = dev
+        self.dev.cla = 0x80
 
     def open_app(self):
         app_name = "nanopass".encode()
-        apdu = bytearray(b"\xe0\xd8\x00\x00")
-        apdu.append(len(app_name))
-        apdu += app_name
-        self.dev.exchange(apdu)
+        self.dev.cla = 0xe0
+        try:
+            self.dev.apdu_exchange(0xd8, app_name)
+        finally:
+            self.dev.cla = 0x80
 
     def quit_app(self):
-        self.dev.exchange(b"\x80\x0c\x00\x00\x00")
+        self.dev.apdu_exchange(0x0c)
 
     def get_version(self) -> str:
         """ :return: App version string """
-        resp = self.dev.exchange(b'\x80\x01\x00\x00')
-        return resp.decode()
+        return self.dev.apdu_exchange(0x01).decode()
 
     def get_size(self) -> int:
         """
         :return: Number of password entries.
         """
-        resp = self.dev.exchange(b'\x80\x02\x00\x00')
+        resp = self.dev.apdu_exchange(0x02)
         assert len(resp) == 4
         return int.from_bytes(resp, 'big')
 
@@ -72,15 +72,12 @@ class Client:
         """
         name_bytes = str_to_bytes_pad(name, MAX_NAME_LEN)
         if password is not None:
-            p1_bytes = b'\x00'
+            p1 = 0x00
             password_bytes = str_to_bytes_pad(password, MAX_PASS_LEN)
         else:
-            p1_bytes = b'\x01'
+            p1 = 0x01
             password_bytes = bytearray()
-        apdu = bytearray(b'\x80\x03' + p1_bytes + b'\x00')
-        apdu.append(len(name_bytes + password_bytes))
-        apdu += name_bytes + password_bytes
-        self.dev.exchange(apdu)
+        self.dev.apdu_exchange(0x03, p1=p1, data=name_bytes + password_bytes)
 
     def get_name(self, index: int) -> str:
         """
@@ -88,8 +85,7 @@ class Client:
         :param index: Password entry index
         :return: Name
         """
-        apdu = b'\x80\x04\x00\x00\x04' + index.to_bytes(4, 'big')
-        r = self.dev.exchange(apdu)
+        r = self.dev.apdu_exchange(0x04, index.to_bytes(4, 'big'))
         while r[-1] == 0:
             r = r[:-1]
         return r.decode()
@@ -105,10 +101,7 @@ class Client:
         :return: Password string
         """
         name_bytes = str_to_bytes_pad(name, MAX_NAME_LEN)
-        apdu = bytearray(b'\x80\x05\x00\x00')
-        apdu.append(len(name_bytes))
-        apdu += name_bytes
-        r = self.dev.exchange(apdu)
+        r = self.dev.apdu_exchange(0x05, name_bytes)
         while r[-1] == 0:
             r = r[:-1]
         return r.decode()
@@ -119,9 +112,7 @@ class Client:
         :param name: Password name.
         """
         name_bytes = str_to_bytes_pad(name, MAX_NAME_LEN)
-        apdu = bytearray(b'\x80\x06\x00\x00')
-        apdu.append(len(name_bytes))
-        apdu += name_bytes
+        self.dev.apdu_exchange(0x06, name_bytes)
         r = self.dev.exchange(apdu)
 
     def export(self, encrypt: bool=True) -> List[bytes]:
@@ -131,15 +122,13 @@ class Client:
             in plaintext.
         :return: Exported entries.
         """
-        apdu = bytearray(b'\x80\x07\x01\x00')
+        p1 = 0x01
         if not encrypt:
-            apdu[2] = 0
-        r = self.dev.exchange(apdu)
-        count = int.from_bytes(r, 'big')
+            p1 = 0x00
+        count = int.from_bytes(self.dev.apdu_exchange(0x07, p1=p1), 'big')
         entries = []
         for i in range(count):
-            r = self.dev.exchange(b'\x80\x08\x00\x00')
-            entries.append(r)
+            entries.append(self.dev.apdu_exchange(0x08))
         return entries
 
     def import_(self, entries: List[bytes], encrypted: bool):
@@ -151,30 +140,25 @@ class Client:
         """
         apdu = bytearray(b'\x80\x09\x00\x00\x04' +
             len(entries).to_bytes(4, 'big'))
+        p1 = 0x00
         if encrypted:
-            apdu[2] = 1
-        r = self.dev.exchange(apdu)
+            p1 = 0x01
+        r = self.dev.apdu_exchange(
+            0x09, p1=p1, data=len(entries).to_bytes(4, 'big'))
         for p in entries:
             assert len(p) == {True: 16+64+16, False: 64}[encrypted]
-            apdu = bytearray(b'\x80\x0a\x00\x00')
-            apdu.append(len(p))
-            apdu += p
-            r = self.dev.exchange(apdu)
+            self.dev.apdu_exchange(0x0a, p)
 
     def clear(self):
         """ Remove all passwords """
-        self.dev.exchange(b'\x80\x0b\x00\x00')
+        self.dev.apdu_exchange(0x0b)
 
 
 @click.group()
 @click.pass_context
-@click.option('-s', '--speculos', is_flag=True)
-def cli(ctx, speculos):
+def cli(ctx):
     ctx.ensure_object(dict)
-    if speculos:
-        dev = getDongleTCP(port=9999)
-    else:
-        dev = getDongle()
+    dev = ledgerwallet.client.LedgerClient()
     ctx.obj['DEV'] = Client(dev)
 
 @cli.command(help="Print installed application version")
