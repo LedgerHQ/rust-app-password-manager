@@ -113,6 +113,14 @@ class Client:
             r = r[:-1]
         return r.decode()
 
+    def get_by_name_internal(self, name: str):
+        """
+        Retrieve the password on the device with the given name.
+        :param name: Password name.
+        """
+        name_bytes = str_to_bytes_pad(name, MAX_NAME_LEN)
+        self.dev.apdu_exchange(0x0d, name_bytes)
+
     def delete_by_name(self, name: str):
         """
         Remove a password.
@@ -190,6 +198,14 @@ def insert(ctx, name):
 def get(ctx, name):
     dev = ctx.obj['DEV']
     print(dev.get_by_name(name))
+
+@cli.command(help="Print a stored password on the device")
+@click.pass_context
+@click.argument('name')
+def getinternal(ctx, name):
+    print("Confirm password display on your device...")
+    dev = ctx.obj['DEV']
+    print(dev.get_by_name_internal(name))
 
 @cli.command(help="List the names of stored passwords")
 @click.pass_context
