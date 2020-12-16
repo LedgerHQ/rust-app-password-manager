@@ -18,20 +18,21 @@ character if it ends with a null byte).
 
 All APDUs use the class `0x80`.
 
-| INS  | Name         | Description                             |
-|------|--------------|-----------------------------------------|
-| 0x01 | GetVersion   | Returns version string                  |
-| 0x02 | GetSize      | Returns the number of stored passwords  |
-| 0x03 | Add          | Add a new password                      |
-| 0x04 | GetName      | Returns name of the n-th password       |
-| 0x05 | GetByName    | Return the password with the given name |
-| 0x06 | DeleteByName | Delete the password with the given name |
-| 0x07 | Export       | Start password export procedure         |
-| 0x08 | ExportNext   | Export the next password                |
-| 0x09 | Import       | Start password import procedure         |
-| 0x0a | ImportNext   | Import the next password                |
-| 0x0b | Clear        | Remove all passwords                    |
-| 0x0c | Quit         | Quit application                        |
+| INS  | Name              | Description                                            |
+|------|-------------------|--------------------------------------------------------|
+| 0x01 | GetVersion        | Returns version string                                 |
+| 0x02 | GetSize           | Returns the number of stored passwords                 |
+| 0x03 | Add               | Add a new password                                     |
+| 0x04 | GetName           | Returns name of the n-th password                      |
+| 0x05 | GetByName         | Return the password with the given name                |
+| 0x06 | DeleteByName      | Delete the password with the given name                |
+| 0x07 | Export            | Start password export procedure                        |
+| 0x08 | ExportNext        | Export the next password                               |
+| 0x09 | Import            | Start password import procedure                        |
+| 0x0a | ImportNext        | Import the next password                               |
+| 0x0b | Clear             | Remove all passwords                                   |
+| 0x0c | Quit              | Quit application                                       |
+| 0x0d | GetByNameInternal | Return the password on the device with the given name  |
 
 ## GetVersion
 
@@ -143,3 +144,11 @@ User consent is not required for this operation.
 
 Quit application to return to the dashboard.
 User consent is not required for this operation.
+
+## GetByNameInternal
+
+Display on the device the password with the given name.
+This operation requires user consent.
+
+The Data field of the APDU must contain the password name on 32-bytes (padded
+with zeros).

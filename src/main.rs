@@ -140,6 +140,34 @@ extern "C" fn sample_main() {
                     }
                 }
             }
+
+            // Get password by name (displayed on the device)
+            io::Event::Command(0x0D) => {
+                let name = ArrayString::<32>::from_bytes(comm.get(5, 5 + 32));
+
+                match passwords.into_iter().find(|&&x| x.name == name) {
+                    Some(&p) => {
+                        if ui::MessageValidator::new(
+                            &[name.as_str()],
+                            &[&"Read", &"password"],
+                            &[&"Cancel"],
+                        )
+                        .ask()
+                        {
+                            ui::popup(p.pass.as_str());
+                            comm.reply_ok();
+                        } else {
+                            ui::popup("Operation cancelled");
+                            comm.reply(StatusWords::Unknown);
+                        }
+                    }
+                    None => {
+                        ui::popup("Password not found");
+                        comm.reply(StatusWords::Unknown);
+                    }
+                }
+            }
+
             // Delete password by name
             io::Event::Command(0x06) => {
                 let name = ArrayString::<32>::from_bytes(comm.get(5, 5 + 32));
