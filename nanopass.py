@@ -61,7 +61,19 @@ class Client:
 
     def get_version(self) -> str:
         """ :return: App version string """
-        return self.dev.apdu_exchange(0x01).decode()
+        resp = self.dev.exchange(b'\x80\x01\x00\x00')
+        offset = 0
+        assert resp[offset] == 1  # Check format
+        offset += 1
+        length = resp[offset]  # App name length
+        offset += 1
+        value = resp[offset:offset+length]
+        assert value == b"nanopass"
+        offset += length
+        length = resp[offset]  # App version string length
+        offset += 1
+        value = resp[offset:offset+length]
+        return value.decode()
 
     def get_size(self) -> int:
         """

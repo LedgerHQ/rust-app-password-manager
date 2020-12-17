@@ -74,9 +74,16 @@ extern "C" fn sample_main() {
             }
             io::Event::Button(_) => {}
             // Get version string
+            // Should comply with other apps standard
             io::Event::Command(0x01) => {
+                const NAME: &'static str = env!("CARGO_PKG_NAME");
                 const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+                comm.append(&[1]); // Format
+                comm.append(&[NAME.len() as u8]);
+                comm.append(NAME.as_bytes());
+                comm.append(&[VERSION.len() as u8]);
                 comm.append(VERSION.as_bytes());
+                comm.append(&[0]); // No flags
                 comm.reply_ok();
             }
             // Get number of stored passwords
