@@ -61,7 +61,7 @@ class Client:
 
     def get_version(self) -> str:
         """ :return: App version string """
-        resp = self.dev.exchange(b'\x80\x01\x00\x00')
+        resp = self.dev.apdu_exchange(0x01)
         offset = 0
         assert resp[offset] == 1  # Check format
         offset += 1
