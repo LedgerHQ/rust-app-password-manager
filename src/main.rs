@@ -63,7 +63,8 @@ extern "C" fn sample_main() {
 
     // Encryption/decryption key for import and export.
     let mut enc_key = [0u8; 32];
-    ecc::bip32_derive(ecc::CurvesId::Secp256k1, &BIP32_PATH, &mut enc_key);
+    if ecc::bip32_derive(ecc::CurvesId::Secp256k1, &BIP32_PATH, &mut enc_key)
+        .is_err() { panic!(); };
 
     loop {
         ui::SingleMessage::new("NanoPass").show();
@@ -106,7 +107,7 @@ extern "C" fn sample_main() {
                 comm.reply(match set_password(passwords, &name, &pass) {
                     Ok(()) => StatusWords::OK,
                     Err(_) => StatusWords::Unknown,
-                });
+                }.into());
             }
             // Get password name
             // This is used by the client to list the names of stored password
@@ -119,7 +120,7 @@ extern "C" fn sample_main() {
                         comm.append(password.name.bytes());
                         comm.reply_ok()
                     }
-                    None => comm.reply(StatusWords::Unknown),
+                    None => comm.reply(StatusWords::Unknown.into()),
                 }
             }
             // Get password by name
@@ -138,12 +139,12 @@ extern "C" fn sample_main() {
                             comm.append(p.pass.bytes());
                             comm.reply_ok();
                         } else {
-                            comm.reply(StatusWords::Unknown);
+                            comm.reply(StatusWords::Unknown.into());
                         }
                     }
                     None => {
                         // Password not found
-                        comm.reply(StatusWords::Unknown);
+                        comm.reply(StatusWords::Unknown.into());
                     }
                 }
             }
@@ -165,12 +166,12 @@ extern "C" fn sample_main() {
                             comm.reply_ok();
                         } else {
                             ui::popup("Operation cancelled");
-                            comm.reply(StatusWords::Unknown);
+                            comm.reply(StatusWords::Unknown.into());
                         }
                     }
                     None => {
                         ui::popup("Password not found");
-                        comm.reply(StatusWords::Unknown);
+                        comm.reply(StatusWords::Unknown.into());
                     }
                 }
             }
@@ -190,12 +191,12 @@ extern "C" fn sample_main() {
                             passwords.remove(p);
                             comm.reply_ok();
                         } else {
-                            comm.reply(StatusWords::Unknown);
+                            comm.reply(StatusWords::Unknown.into());
                         }
                     }
                     None => {
                         // Password not found
-                        comm.reply(StatusWords::Unknown);
+                        comm.reply(StatusWords::Unknown.into());
                     }
                 }
             }
@@ -204,22 +205,22 @@ extern "C" fn sample_main() {
             io::Event::Command(0x07) => match comm.get_p1() {
                 0 => export(&mut comm, &passwords, None),
                 1 => export(&mut comm, &passwords, Some(&enc_key)),
-                _ => comm.reply(StatusWords::Unknown),
+                _ => comm.reply(StatusWords::Unknown.into()),
             },
             // Reserved for export
             io::Event::Command(0x08) => {
-                comm.reply(StatusWords::Unknown);
+                comm.reply(StatusWords::Unknown.into());
             }
             // Import
             // P1 can be 0 for plaintext, 1 for encrypted import.
             io::Event::Command(0x09) => match comm.get_p1() {
                 0 => import(&mut comm, &mut passwords, None),
                 1 => import(&mut comm, &mut passwords, Some(&enc_key)),
-                _ => comm.reply(StatusWords::Unknown),
+                _ => comm.reply(StatusWords::Unknown.into()),
             },
             // Reserved for import
             io::Event::Command(0x0a) => {
-                comm.reply(StatusWords::Unknown);
+                comm.reply(StatusWords::Unknown.into());
             }
             io::Event::Command(0x0b) => {
                 // Remove all passwords
@@ -245,7 +246,7 @@ extern "C" fn sample_main() {
                         }
                     } else {
                         StatusWords::Unknown
-                    },
+                    }.into(),
                 );
             }
             // Exit
@@ -253,7 +254,7 @@ extern "C" fn sample_main() {
                 comm.reply_ok();
                 nanos_sdk::exit_app(0);
             }
-            io::Event::Command(_) => comm.reply(StatusWords::BadCLA),
+            io::Event::Command(_) => comm.reply(StatusWords::BadCLA.into()),
         }
     }
 }
@@ -350,7 +351,7 @@ fn export(
     if !ui::MessageValidator::new(&[], &[&"Export", &"passwords"], &[&"Cancel"])
         .ask()
     {
-        comm.reply(StatusWords::Unknown);
+        comm.reply(StatusWords::Unknown.into());
         return;
     }
 
@@ -364,7 +365,7 @@ fn export(
         )
         .ask()
     {
-        comm.reply(StatusWords::Unknown);
+        comm.reply(StatusWords::Unknown.into());
         return;
     }
 
@@ -455,7 +456,7 @@ fn import(
     if !ui::MessageValidator::new(&[], &[&"Import", &"passwords"], &[&"Cancel"])
         .ask()
     {
-        comm.reply(StatusWords::Unknown);
+        comm.reply(StatusWords::Unknown.into());
         return;
     } else {
         comm.reply_ok();
@@ -527,16 +528,16 @@ fn import(
                         passwords.remove(index);
                     }
                     comm.reply(match passwords.add(&new_item) {
-                        Ok(()) => StatusWords::OK,
-                        Err(nvm::StorageFullError) => StatusWords::Unknown,
+                        Ok(()) => StatusWords::OK.into(),
+                        Err(nvm::StorageFullError) => StatusWords::Unknown.into(),
                     });
                 } else {
-                    comm.reply(StatusWords::Unknown);
+                    comm.reply(StatusWords::Unknown.into());
                     break;
                 }
             }
             _ => {
-                comm.reply(StatusWords::BadCLA);
+                comm.reply(StatusWords::BadCLA.into());
                 break;
             }
         }
