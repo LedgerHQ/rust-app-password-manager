@@ -379,57 +379,54 @@ fn export(
     let mut iter = passwords.into_iter();
     let mut next_item = iter.next();
     while next_item.is_some() {
-        match comm.next_command() {
+        if let 0x08 = comm.next_command() {
             // Fetch next password
-            0x08 => {
-                let password = next_item.unwrap();
-                // If encryption is enabled, encrypt the buffer inplace.
-                if encrypted {
-                    let mut nonce = [0u8; 16];
-                    random::rand_bytes(&mut nonce);
-                    comm.append(&nonce);
-                    let mut buffer: Vec<u8, U64> = Vec::new();
-                    buffer.extend_from_slice(password.name.bytes()).unwrap();
-                    buffer.extend_from_slice(password.pass.bytes()).unwrap();
-                    // Encrypt buffer in AES-256-CBC with random IV
-                    let mut aes_ctx = MaybeUninit::<tinyaes::AES_ctx>::uninit();
-                    unsafe {
-                        tinyaes::AES_init_ctx_iv(
-                            aes_ctx.as_mut_ptr(),
-                            enc_key.unwrap().as_ptr(),
-                            nonce.as_ptr(),
-                        );
-                        tinyaes::AES_CBC_encrypt_buffer(
-                            aes_ctx.as_mut_ptr(),
-                            buffer.as_mut_ptr(),
-                            buffer.len() as u32,
-                        );
-                    }
-                    comm.append(&buffer as &[u8]);
-                    // Now calculate AES-256-CBC-MAC
-                    unsafe {
-                        tinyaes::AES_init_ctx_iv(
-                            aes_ctx.as_mut_ptr(),
-                            enc_key.unwrap().as_ptr(),
-                            nonce.as_ptr(),
-                        );
-                        tinyaes::AES_CBC_encrypt_buffer(
-                            aes_ctx.as_mut_ptr(),
-                            buffer.as_mut_ptr(),
-                            buffer.len() as u32,
-                        );
-                    }
-                    let mac = &buffer[buffer.len() - 16..];
-                    comm.append(mac);
-                } else {
-                    comm.append(password.name.bytes());
-                    comm.append(password.pass.bytes());
+            let password = next_item.unwrap();
+            // If encryption is enabled, encrypt the buffer inplace.
+            if encrypted {
+                let mut nonce = [0u8; 16];
+                random::rand_bytes(&mut nonce);
+                comm.append(&nonce);
+                let mut buffer: Vec<u8, U64> = Vec::new();
+                buffer.extend_from_slice(password.name.bytes()).unwrap();
+                buffer.extend_from_slice(password.pass.bytes()).unwrap();
+                // Encrypt buffer in AES-256-CBC with random IV
+                let mut aes_ctx = MaybeUninit::<tinyaes::AES_ctx>::uninit();
+                unsafe {
+                    tinyaes::AES_init_ctx_iv(
+                        aes_ctx.as_mut_ptr(),
+                        enc_key.unwrap().as_ptr(),
+                        nonce.as_ptr(),
+                    );
+                    tinyaes::AES_CBC_encrypt_buffer(
+                        aes_ctx.as_mut_ptr(),
+                        buffer.as_mut_ptr(),
+                        buffer.len() as u32,
+                    );
                 }
-                comm.reply_ok();
-                // Advance iterator.
-                next_item = iter.next();
+                comm.append(&buffer as &[u8]);
+                // Now calculate AES-256-CBC-MAC
+                unsafe {
+                    tinyaes::AES_init_ctx_iv(
+                        aes_ctx.as_mut_ptr(),
+                        enc_key.unwrap().as_ptr(),
+                        nonce.as_ptr(),
+                    );
+                    tinyaes::AES_CBC_encrypt_buffer(
+                        aes_ctx.as_mut_ptr(),
+                        buffer.as_mut_ptr(),
+                        buffer.len() as u32,
+                    );
+                }
+                let mac = &buffer[buffer.len() - 16..];
+                comm.append(mac);
+            } else {
+                comm.append(password.name.bytes());
+                comm.append(password.pass.bytes());
             }
-            _ => {}
+            comm.reply_ok();
+            // Advance iterator.
+            next_item = iter.next();
         }
     }
 }
