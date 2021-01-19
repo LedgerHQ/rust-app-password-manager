@@ -15,7 +15,6 @@
 #![no_std]
 #![no_main]
 #![feature(const_fn)]
-#![feature(min_const_generics)]
 
 use nanos_sdk::buttons::ButtonEvent;
 use nanos_sdk::ecc;
@@ -63,7 +62,7 @@ extern "C" fn sample_main() {
 
     // Encryption/decryption key for import and export.
     let mut enc_key = [0u8; 32];
-    ecc::bip32_derive(ecc::CurvesId::Secp256k1, &BIP32_PATH, &mut enc_key);
+    ecc::bip32_derive(ecc::CurvesId::Secp256k1, &BIP32_PATH, &mut enc_key).expect("Failed to derive bip32 node.");
 
     loop {
         ui::SingleMessage::new("NanoPass").show();
@@ -76,8 +75,8 @@ extern "C" fn sample_main() {
             // Get version string
             // Should comply with other apps standard
             io::Event::Command(0x01) => {
-                const NAME: &'static str = env!("CARGO_PKG_NAME");
-                const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+                const NAME: &str = env!("CARGO_PKG_NAME");
+                const VERSION: &str = env!("CARGO_PKG_VERSION");
                 comm.append(&[1]); // Format
                 comm.append(&[NAME.len() as u8]);
                 comm.append(NAME.as_bytes());
@@ -104,8 +103,8 @@ extern "C" fn sample_main() {
                     _ => None,
                 };
                 comm.reply(match set_password(passwords, &name, &pass) {
-                    Ok(()) => StatusWords::OK,
-                    Err(_) => StatusWords::Unknown,
+                    Ok(()) => StatusWords::OK.into(),
+                    Err(_) => StatusWords::Unknown.into(),
                 });
             }
             // Get password name
@@ -119,7 +118,7 @@ extern "C" fn sample_main() {
                         comm.append(password.name.bytes());
                         comm.reply_ok()
                     }
-                    None => comm.reply(StatusWords::Unknown),
+                    None => comm.reply(StatusWords::Unknown.into()),
                 }
             }
             // Get password by name
@@ -138,12 +137,12 @@ extern "C" fn sample_main() {
                             comm.append(p.pass.bytes());
                             comm.reply_ok();
                         } else {
-                            comm.reply(StatusWords::Unknown);
+                            comm.reply(StatusWords::Unknown.into());
                         }
                     }
                     None => {
                         // Password not found
-                        comm.reply(StatusWords::Unknown);
+                        comm.reply(StatusWords::Unknown.into());
                     }
                 }
             }
@@ -165,12 +164,12 @@ extern "C" fn sample_main() {
                             comm.reply_ok();
                         } else {
                             ui::popup("Operation cancelled");
-                            comm.reply(StatusWords::Unknown);
+                            comm.reply(StatusWords::Unknown.into());
                         }
                     }
                     None => {
                         ui::popup("Password not found");
-                        comm.reply(StatusWords::Unknown);
+                        comm.reply(StatusWords::Unknown.into());
                     }
                 }
             }
@@ -190,12 +189,12 @@ extern "C" fn sample_main() {
                             passwords.remove(p);
                             comm.reply_ok();
                         } else {
-                            comm.reply(StatusWords::Unknown);
+                            comm.reply(StatusWords::Unknown.into());
                         }
                     }
                     None => {
                         // Password not found
-                        comm.reply(StatusWords::Unknown);
+                        comm.reply(StatusWords::Unknown.into());
                     }
                 }
             }
@@ -204,22 +203,22 @@ extern "C" fn sample_main() {
             io::Event::Command(0x07) => match comm.get_p1() {
                 0 => export(&mut comm, &passwords, None),
                 1 => export(&mut comm, &passwords, Some(&enc_key)),
-                _ => comm.reply(StatusWords::Unknown),
+                _ => comm.reply(StatusWords::Unknown.into()),
             },
             // Reserved for export
             io::Event::Command(0x08) => {
-                comm.reply(StatusWords::Unknown);
+                comm.reply(StatusWords::Unknown.into());
             }
             // Import
             // P1 can be 0 for plaintext, 1 for encrypted import.
             io::Event::Command(0x09) => match comm.get_p1() {
                 0 => import(&mut comm, &mut passwords, None),
                 1 => import(&mut comm, &mut passwords, Some(&enc_key)),
-                _ => comm.reply(StatusWords::Unknown),
+                _ => comm.reply(StatusWords::Unknown.into()),
             },
             // Reserved for import
             io::Event::Command(0x0a) => {
-                comm.reply(StatusWords::Unknown);
+                comm.reply(StatusWords::Unknown.into());
             }
             io::Event::Command(0x0b) => {
                 // Remove all passwords
@@ -239,12 +238,12 @@ extern "C" fn sample_main() {
                         .ask()
                         {
                             passwords.clear();
-                            StatusWords::OK
+                            StatusWords::OK.into()
                         } else {
-                            StatusWords::Unknown
+                            StatusWords::Unknown.into()
                         }
                     } else {
-                        StatusWords::Unknown
+                        StatusWords::Unknown.into()
                     },
                 );
             }
@@ -253,7 +252,7 @@ extern "C" fn sample_main() {
                 comm.reply_ok();
                 nanos_sdk::exit_app(0);
             }
-            io::Event::Command(_) => comm.reply(StatusWords::BadCLA),
+            io::Event::Command(_) => comm.reply(StatusWords::BadCLA.into()),
         }
     }
 }
@@ -350,7 +349,7 @@ fn export(
     if !ui::MessageValidator::new(&[], &[&"Export", &"passwords"], &[&"Cancel"])
         .ask()
     {
-        comm.reply(StatusWords::Unknown);
+        comm.reply(StatusWords::Unknown.into());
         return;
     }
 
@@ -364,7 +363,7 @@ fn export(
         )
         .ask()
     {
-        comm.reply(StatusWords::Unknown);
+        comm.reply(StatusWords::Unknown.into());
         return;
     }
 
@@ -380,57 +379,54 @@ fn export(
     let mut iter = passwords.into_iter();
     let mut next_item = iter.next();
     while next_item.is_some() {
-        match comm.next_command() {
+        if let 0x08 = comm.next_command() {
             // Fetch next password
-            0x08 => {
-                let password = next_item.unwrap();
-                // If encryption is enabled, encrypt the buffer inplace.
-                if encrypted {
-                    let mut nonce = [0u8; 16];
-                    random::rand_bytes(&mut nonce);
-                    comm.append(&nonce);
-                    let mut buffer: Vec<u8, U64> = Vec::new();
-                    buffer.extend_from_slice(password.name.bytes()).unwrap();
-                    buffer.extend_from_slice(password.pass.bytes()).unwrap();
-                    // Encrypt buffer in AES-256-CBC with random IV
-                    let mut aes_ctx = MaybeUninit::<tinyaes::AES_ctx>::uninit();
-                    unsafe {
-                        tinyaes::AES_init_ctx_iv(
-                            aes_ctx.as_mut_ptr(),
-                            enc_key.unwrap().as_ptr(),
-                            nonce.as_ptr(),
-                        );
-                        tinyaes::AES_CBC_encrypt_buffer(
-                            aes_ctx.as_mut_ptr(),
-                            buffer.as_mut_ptr(),
-                            buffer.len() as u32,
-                        );
-                    }
-                    comm.append(&buffer as &[u8]);
-                    // Now calculate AES-256-CBC-MAC
-                    unsafe {
-                        tinyaes::AES_init_ctx_iv(
-                            aes_ctx.as_mut_ptr(),
-                            enc_key.unwrap().as_ptr(),
-                            nonce.as_ptr(),
-                        );
-                        tinyaes::AES_CBC_encrypt_buffer(
-                            aes_ctx.as_mut_ptr(),
-                            buffer.as_mut_ptr(),
-                            buffer.len() as u32,
-                        );
-                    }
-                    let mac = &buffer[buffer.len() - 16..];
-                    comm.append(mac);
-                } else {
-                    comm.append(password.name.bytes());
-                    comm.append(password.pass.bytes());
+            let password = next_item.unwrap();
+            // If encryption is enabled, encrypt the buffer inplace.
+            if encrypted {
+                let mut nonce = [0u8; 16];
+                random::rand_bytes(&mut nonce);
+                comm.append(&nonce);
+                let mut buffer: Vec<u8, U64> = Vec::new();
+                buffer.extend_from_slice(password.name.bytes()).unwrap();
+                buffer.extend_from_slice(password.pass.bytes()).unwrap();
+                // Encrypt buffer in AES-256-CBC with random IV
+                let mut aes_ctx = MaybeUninit::<tinyaes::AES_ctx>::uninit();
+                unsafe {
+                    tinyaes::AES_init_ctx_iv(
+                        aes_ctx.as_mut_ptr(),
+                        enc_key.unwrap().as_ptr(),
+                        nonce.as_ptr(),
+                    );
+                    tinyaes::AES_CBC_encrypt_buffer(
+                        aes_ctx.as_mut_ptr(),
+                        buffer.as_mut_ptr(),
+                        buffer.len() as u32,
+                    );
                 }
-                comm.reply_ok();
-                // Advance iterator.
-                next_item = iter.next();
+                comm.append(&buffer as &[u8]);
+                // Now calculate AES-256-CBC-MAC
+                unsafe {
+                    tinyaes::AES_init_ctx_iv(
+                        aes_ctx.as_mut_ptr(),
+                        enc_key.unwrap().as_ptr(),
+                        nonce.as_ptr(),
+                    );
+                    tinyaes::AES_CBC_encrypt_buffer(
+                        aes_ctx.as_mut_ptr(),
+                        buffer.as_mut_ptr(),
+                        buffer.len() as u32,
+                    );
+                }
+                let mac = &buffer[buffer.len() - 16..];
+                comm.append(mac);
+            } else {
+                comm.append(password.name.bytes());
+                comm.append(password.pass.bytes());
             }
-            _ => {}
+            comm.reply_ok();
+            // Advance iterator.
+            next_item = iter.next();
         }
     }
 }
@@ -455,7 +451,7 @@ fn import(
     if !ui::MessageValidator::new(&[], &[&"Import", &"passwords"], &[&"Cancel"])
         .ask()
     {
-        comm.reply(StatusWords::Unknown);
+        comm.reply(StatusWords::Unknown.into());
         return;
     } else {
         comm.reply_ok();
@@ -527,16 +523,16 @@ fn import(
                         passwords.remove(index);
                     }
                     comm.reply(match passwords.add(&new_item) {
-                        Ok(()) => StatusWords::OK,
-                        Err(nvm::StorageFullError) => StatusWords::Unknown,
+                        Ok(()) => StatusWords::OK.into(),
+                        Err(nvm::StorageFullError) => StatusWords::Unknown.into(),
                     });
                 } else {
-                    comm.reply(StatusWords::Unknown);
+                    comm.reply(StatusWords::Unknown.into());
                     break;
                 }
             }
             _ => {
-                comm.reply(StatusWords::BadCLA);
+                comm.reply(StatusWords::BadCLA.into());
                 break;
             }
         }
