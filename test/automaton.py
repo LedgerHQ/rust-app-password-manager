@@ -26,6 +26,7 @@ class Automaton:
         self.sock_buttons = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock_buttons.connect(("localhost", 9998))
         self.actions = ''
+        self.cla = 0x80
 
     def transmit(self, apdu: bytes):
         self.sock.send(len(apdu).to_bytes(4, 'big') + apdu)
@@ -36,13 +37,14 @@ class Automaton:
         result = self.__recv_all(size+2)
         return result
 
-    def exchange(self, apdu: bytes) -> bytes:
+    def apdu_exchange(self, ins: int, data: bytes=b"", p1: int=0, p2:int=0
+        ) -> bytes:
         """
         Send an APDU and return the response. Process button press indicated in
         self.actions during the APDU processing of the device.
-        Satus word is removed from the response, in order to have the same
-        interface as ledgerblue lib.
+        API matches ledgerwallet library.
         """
+        apdu = bytes([self.cla, ins, p1, p2, len(data)]) + data
         self.transmit(apdu)
         if len(self.actions):
             for c in self.actions:
