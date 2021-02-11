@@ -27,6 +27,7 @@ class Automaton:
         self.sock_buttons.connect(("localhost", 9998))
         self.actions = ''
         self.cla = 0x80
+        self.button_delay = 0.1
 
     def transmit(self, apdu: bytes):
         self.sock.send(len(apdu).to_bytes(4, 'big') + apdu)
@@ -46,15 +47,18 @@ class Automaton:
         """
         apdu = bytes([self.cla, ins, p1, p2, len(data)]) + data
         self.transmit(apdu)
-        if len(self.actions):
-            for c in self.actions:
-                if c == 'r':
-                    self.press_right()
-                elif c == 'l':
-                    self.press_left()
-                elif c == 'b':
-                    self.press_both()
-            self.actions = ''
+        while len(self.actions):
+            c = self.actions[0]
+            self.actions = self.actions[1:]
+            if c == 'r':
+                self.press_right()
+            elif c == 'l':
+                self.press_left()
+            elif c == 'b':
+                self.press_both()
+            elif c == ';':
+                # Next actions for next APDU
+                break;
         resp = self.receive()
         assert resp[-2:] == b'\x90\x00'
         return resp[:-2]
@@ -68,19 +72,20 @@ class Automaton:
         return result
 
     def press_left(self):
-        sleep(0.2)
+        sleep(self.button_delay)
         self.sock_buttons.write('L'.encode())
-        sleep(0.2)
+        sleep(self.button_delay)
         self.sock_buttons.write('l'.encode())
     
     def press_right(self):
-        sleep(0.2)
+        sleep(self.button_delay)
         self.sock_buttons.send('R'.encode())
-        sleep(0.2)
+        sleep(self.button_delay)
         self.sock_buttons.send('r'.encode())
 
     def press_both(self):
-        sleep(0.2)
+        sleep(self.button_delay)
         self.sock_buttons.send('RL'.encode())
-        sleep(0.2)
+        sleep(self.button_delay)
         self.sock_buttons.send('rl'.encode())
+

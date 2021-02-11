@@ -100,14 +100,16 @@ impl<const N: usize> Eq for ArrayString<N> {}
 #[derive(Clone, Copy)]
 pub struct PasswordItem {
     pub name: ArrayString<32>,
-    pub pass: ArrayString<32>,
+    pub login: ArrayString<32>,
+    pub pass: ArrayString<32>
 }
 
 impl PasswordItem {
     pub const fn new() -> PasswordItem {
         PasswordItem {
             name: ArrayString::new(),
-            pass: ArrayString::new(),
+            login: ArrayString::new(),
+            pass: ArrayString::new()
         }
     }
 }
