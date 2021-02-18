@@ -23,7 +23,7 @@ use nanos_sdk::io;
 use nanos_sdk::io::StatusWords;
 use nanos_sdk::nvm;
 use nanos_sdk::random;
-use nanos_sdk::PIC;
+use nanos_sdk::Pic;
 use nanos_ui::ui;
 mod password;
 use heapless::{consts::U96, Vec};
@@ -36,8 +36,8 @@ nanos_sdk::set_panic!(nanos_sdk::exiting_panic);
 #[no_mangle]
 #[link_section = ".nvm_data"]
 /// Stores all passwords in Non-Volatile Memory
-static mut PASSWORDS: PIC<nvm::Collection<PasswordItem, 128>> =
-    PIC::new(nvm::Collection::new(PasswordItem::new()));
+static mut PASSWORDS: Pic<nvm::Collection<PasswordItem, 128>> =
+    Pic::new(nvm::Collection::new(PasswordItem::new()));
 
 /// Possible characters for the randomly generated passwords
 static PASS_CHARS: &str =
@@ -112,7 +112,7 @@ extern "C" fn sample_main() {
                 };
                 comm.reply(
                     match set_password(passwords, &name, &login, &pass) {
-                        Ok(()) => StatusWords::OK,
+                        Ok(()) => StatusWords::Ok,
                         Err(_) => StatusWords::Unknown,
                     }
                 );
@@ -252,7 +252,7 @@ extern "C" fn sample_main() {
                         .ask()
                         {
                             passwords.clear();
-                            StatusWords::OK
+                            StatusWords::Ok
                         } else {
                             StatusWords::Unknown
                         }
@@ -266,7 +266,7 @@ extern "C" fn sample_main() {
                 comm.reply_ok();
                 nanos_sdk::exit_app(0);
             }
-            io::Event::Command(_) => comm.reply(StatusWords::BadCLA),
+            io::Event::Command(_) => comm.reply(StatusWords::BadCla),
         }
     }
 }
@@ -554,7 +554,7 @@ fn import(
                         passwords.remove(index);
                     }
                     comm.reply(match passwords.add(&new_item) {
-                        Ok(()) => StatusWords::OK,
+                        Ok(()) => StatusWords::Ok,
                         Err(nvm::StorageFullError) => StatusWords::Unknown,
                     });
                 } else {
@@ -563,7 +563,7 @@ fn import(
                 }
             }
             _ => {
-                comm.reply(StatusWords::BadCLA);
+                comm.reply(StatusWords::BadCla);
                 break;
             }
         }
