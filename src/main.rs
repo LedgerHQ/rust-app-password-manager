@@ -64,7 +64,7 @@ enum Instruction {
     ImportNext,
     Clear,
     Quit,
-    GetByNameInternal
+    ShowOnScreen
 }
 
 impl TryFrom<u8> for Instruction {
@@ -84,7 +84,7 @@ impl TryFrom<u8> for Instruction {
             0x0a => Ok(Self::ImportNext),
             0x0b => Ok(Self::Clear),
             0x0c => Ok(Self::Quit),
-            0x0d => Ok(Self::GetByNameInternal),
+            0x0d => Ok(Self::ShowOnScreen),
             _ => Err(())
         }
     }
@@ -199,8 +199,9 @@ extern "C" fn sample_main() {
                 }
             }
 
-            // Get password by name (displayed on the device)
-            io::Event::Command(Instruction::GetByNameInternal) => {
+            // Display a password on the screen only, without communicating it
+            // to the host.
+            io::Event::Command(Instruction::ShowOnScreen) => {
                 let name = ArrayString::<32>::from_bytes(comm.get(5, 5 + 32));
 
                 match passwords.into_iter().find(|&&x| x.name == name) {
