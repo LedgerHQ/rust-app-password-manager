@@ -15,7 +15,6 @@
 #![no_std]
 #![no_main]
 #![feature(const_fn)]
-#![feature(min_const_generics)]
 
 use nanos_sdk::buttons::ButtonEvent;
 use nanos_sdk::ecc;
