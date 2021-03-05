@@ -243,6 +243,10 @@ def insert(ctx, name, login):
 @click.argument('name')
 def get(ctx, name):
     dev = ctx.obj['DEV']
+    if not dev.has_name(name):
+        print("Credentials not found")
+        return
+    print("Confirm access on device...")
     login, password = dev.get_by_name(name)
     if len(login):
         print("login:", login)
