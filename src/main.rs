@@ -19,7 +19,7 @@
 use nanos_sdk::buttons::ButtonEvent;
 use nanos_sdk::ecc;
 use nanos_sdk::io;
-use nanos_sdk::io::StatusWords;
+use nanos_sdk::io::{StatusWords, Reply};
 use nanos_sdk::nvm;
 use nanos_sdk::random;
 use nanos_sdk::Pic;
@@ -49,6 +49,19 @@ static BIP32_PATH: [u32; 2] = ecc::make_bip32_path(b"m/10016'/0");
 enum Error {
     NoConsent,
     StorageFull,
+    EntryNotFound,
+    DecryptFailed
+}
+
+impl Into<Reply> for Error {
+    fn into(self) -> Reply {
+        match self {
+            Error::NoConsent => Reply(0x69f0 as u16),
+            Error::StorageFull => Reply(0x9210 as u16),
+            Error::EntryNotFound => Reply(0x6a88 as u16),
+            Error::DecryptFailed => Reply(0x9d60 as u16)
+        }
+    }
 }
 
 enum Instruction {
@@ -64,7 +77,8 @@ enum Instruction {
     ImportNext,
     Clear,
     Quit,
-    ShowOnScreen
+    ShowOnScreen,
+    HasName
 }
 
 impl TryFrom<u8> for Instruction {
@@ -85,6 +99,7 @@ impl TryFrom<u8> for Instruction {
             0x0b => Ok(Self::Clear),
             0x0c => Ok(Self::Quit),
             0x0d => Ok(Self::ShowOnScreen),
+            0x0e => Ok(Self::HasName),
             _ => Err(())
         }
     }
@@ -149,10 +164,10 @@ extern "C" fn sample_main() {
                     )),
                     _ => None,
                 };
-                comm.reply(
+                comm.reply::<Reply>(
                     match set_password(passwords, &name, &login, &pass) {
-                        Ok(()) => StatusWords::Ok,
-                        Err(_) => StatusWords::Unknown,
+                        Ok(()) => StatusWords::Ok.into(),
+                        Err(e) => e.into(),
                     }
                 );
             }
@@ -168,7 +183,7 @@ extern "C" fn sample_main() {
                         comm.append(password.name.bytes());
                         comm.reply_ok()
                     }
-                    None => comm.reply(StatusWords::Unknown),
+                    None => comm.reply(Error::EntryNotFound),
                 }
             }
             // Get password by name
@@ -189,12 +204,12 @@ extern "C" fn sample_main() {
                             comm.append(p.pass.bytes());
                             comm.reply_ok();
                         } else {
-                            comm.reply(StatusWords::Unknown);
+                            comm.reply(Error::NoConsent);
                         }
                     }
                     None => {
                         // Password not found
-                        comm.reply(StatusWords::Unknown);
+                        comm.reply(Error::EntryNotFound);
                     }
                 }
             }
@@ -218,12 +233,12 @@ extern "C" fn sample_main() {
                             comm.reply_ok();
                         } else {
                             ui::popup("Operation cancelled");
-                            comm.reply(StatusWords::Unknown);
+                            comm.reply(Error::NoConsent);
                         }
                     }
                     None => {
                         ui::popup("Password not found");
-                        comm.reply(StatusWords::Unknown);
+                        comm.reply(Error::EntryNotFound);
                     }
                 }
             }
@@ -243,12 +258,12 @@ extern "C" fn sample_main() {
                             passwords.remove(p);
                             comm.reply_ok();
                         } else {
-                            comm.reply(StatusWords::Unknown);
+                            comm.reply(Error::NoConsent);
                         }
                     }
                     None => {
                         // Password not found
-                        comm.reply(StatusWords::Unknown);
+                        comm.reply(Error::EntryNotFound);
                     }
                 }
             }
@@ -276,7 +291,7 @@ extern "C" fn sample_main() {
             }
             io::Event::Command(Instruction::Clear) => {
                 // Remove all passwords
-                comm.reply(
+                comm.reply::<Reply>(
                     if ui::MessageValidator::new(
                         &[],
                         &[&"Remove all", &"passwords"],
@@ -292,12 +307,12 @@ extern "C" fn sample_main() {
                         .ask()
                         {
                             passwords.clear();
-                            StatusWords::Ok
+                            StatusWords::Ok.into()
                         } else {
-                            StatusWords::Unknown
+                            Error::NoConsent.into()
                         }
                     } else {
-                        StatusWords::Unknown
+                        Error::NoConsent.into()
                     },
                 );
             }
@@ -305,6 +320,19 @@ extern "C" fn sample_main() {
             io::Event::Command(Instruction::Quit) => {
                 comm.reply_ok();
                 nanos_sdk::exit_app(0);
+            }
+            // HasName
+            io::Event::Command(Instruction::HasName) => {
+                let name = ArrayString::<32>::from_bytes(comm.get(5, 5 + 32));
+                match passwords.into_iter().find(|&&x| x.name == name) {
+                    Some(_) => {
+                        comm.append(&[1]);
+                    }
+                    None => {
+                        comm.append(&[0]);
+                    }
+                }
+                comm.reply_ok();
             }
         }
     }
@@ -404,7 +432,7 @@ fn export(
     if !ui::MessageValidator::new(&[], &[&"Export", &"passwords"], &[&"Cancel"])
         .ask()
     {
-        comm.reply(StatusWords::Unknown);
+        comm.reply(Error::NoConsent);
         return;
     }
 
@@ -418,7 +446,7 @@ fn export(
         )
         .ask()
     {
-        comm.reply(StatusWords::Unknown);
+        comm.reply(Error::NoConsent);
         return;
     }
 
@@ -514,7 +542,7 @@ fn import(
     if !ui::MessageValidator::new(&[], &[&"Import", &"passwords"], &[&"Cancel"])
         .ask()
     {
-        comm.reply(StatusWords::Unknown);
+        comm.reply(Error::NoConsent);
         return;
     } else {
         comm.reply_ok();
@@ -592,12 +620,12 @@ fn import(
                     {
                         passwords.remove(index);
                     }
-                    comm.reply(match passwords.add(&new_item) {
-                        Ok(()) => StatusWords::Ok,
-                        Err(nvm::StorageFullError) => StatusWords::Unknown,
+                    comm.reply::<Reply>(match passwords.add(&new_item) {
+                        Ok(()) => StatusWords::Ok.into(),
+                        Err(nvm::StorageFullError) => Error::StorageFull.into(),
                     });
                 } else {
-                    comm.reply(StatusWords::Unknown);
+                    comm.reply(Error::DecryptFailed);
                     break;
                 }
             }

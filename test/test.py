@@ -35,6 +35,12 @@ def test_password_list():
     assert (set(client.get_names()) ==
         set(name for (name, _, _) in passwords))
 
+def test_has_name():
+    """ Test the HasName APDU command """
+    for name, _, _ in passwords:
+        assert client.has_name(name)
+    assert not client.has_name("undefined")
+
 def test_password_retrieval():
     """ Verify the correctness of login and password values. """
     for name, login, password in passwords:
@@ -60,6 +66,7 @@ for i, (name, login, password) in enumerate(passwords):
     assert client.get_size() == i+1
 
 test_password_list()
+test_has_name()
 test_password_retrieval()
 
 # Export in plain text and also in encrypted form

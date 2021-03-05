@@ -204,6 +204,14 @@ class Client:
         """ Remove all passwords """
         self.dev.apdu_exchange(0x0b)
 
+    def has_name(self, name: str):
+        """ Query if a password with the given name exists. """
+        name_bytes = str_to_bytes_pad(name, MAX_NAME_LEN)
+        res = self.dev.apdu_exchange(0x0e, name_bytes)
+        assert len(res) == 1
+        assert res[0] in (0, 1)
+        return bool(res[0])
+
 
 @click.group()
 @click.pass_context
