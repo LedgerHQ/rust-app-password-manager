@@ -14,7 +14,6 @@
 
 #![no_std]
 #![no_main]
-#![feature(const_fn)]
 
 use nanos_sdk::buttons::ButtonEvent;
 use nanos_sdk::ecc;
@@ -345,9 +344,10 @@ extern "C" fn sample_main() {
 /// * `dest` - An array where the result is stored. Must be at least
 ///   `size` long. No terminal zero is written.
 /// * `size` - The size of the password to be generated
+use random::Random;
 fn generate_random_password(dest: &mut [u8], size: usize) {
     for item in dest.iter_mut().take(size) {
-        let rand_index = random::rand_u32_range(0..PASS_CHARS.len() as u32);
+        let rand_index = u32::random_from_range(0..PASS_CHARS.len() as u32);
         *item = PASS_CHARS.chars().nth(rand_index as usize).unwrap() as u8;
     }
 }
