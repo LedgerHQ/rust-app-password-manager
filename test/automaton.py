@@ -18,25 +18,17 @@ from nanopass import Client
 from time import sleep
 from binascii import hexlify
 import socket
+import os.path
+from speculos.client import SpeculosClient
 
-class Automaton:
+class Automaton(SpeculosClient):
     def __init__(self):
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.connect(("localhost", 9999))
-        self.sock_buttons = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock_buttons.connect(("localhost", 9998))
+        app_path = os.path.join(
+            os.path.dirname(__file__), "..", "target", "thumbv6m-none-eabi",
+            "release", "nanopass")
+        super().__init__(app_path)
         self.actions = ''
         self.cla = 0x80
-        self.button_delay = 0.1
-
-    def transmit(self, apdu: bytes):
-        self.sock.send(len(apdu).to_bytes(4, 'big') + apdu)
-
-    def receive(self) -> bytes:
-        data = self.__recv_all(4)
-        size = int.from_bytes(data, 'big')
-        result = self.__recv_all(size+2)
-        return result
 
     def apdu_exchange(self, ins: int, data: bytes=b"", p1: int=0, p2:int=0
         ) -> bytes:
@@ -46,46 +38,30 @@ class Automaton:
         API matches ledgerwallet library.
         """
         apdu = bytes([self.cla, ins, p1, p2, len(data)]) + data
-        self.transmit(apdu)
-        while len(self.actions):
-            c = self.actions[0]
-            self.actions = self.actions[1:]
-            if c == 'r':
-                self.press_right()
-            elif c == 'l':
-                self.press_left()
-            elif c == 'b':
-                self.press_both()
-            elif c == ';':
-                # Next actions for next APDU
-                break;
-        resp = self.receive()
-        assert resp[-2:] == b'\x90\x00'
-        return resp[:-2]
+        with super().apdu_exchange_nowait(self.cla, ins, data, p1=p1, p2=p2) as response:
+            while len(self.actions):
+                c = self.actions[0]
+                self.actions = self.actions[1:]
+                if c == 'r':
+                    self.press_right()
+                elif c == 'l':
+                    self.press_left()
+                elif c == 'b':
+                    self.press_both()
+                elif c == ';':
+                    # Next actions for next APDU
+                    break;
+            return response.receive()
         
-    def __recv_all(self, n) -> bytes:
-        result = bytes()
-        while n > 0:
-            chunck = self.sock.recv(n)
-            result += chunck
-            n -= len(chunck)
-        return result
+    def press(self, button: str):
+        self.press_and_release(button)
 
     def press_left(self):
-        sleep(self.button_delay)
-        self.sock_buttons.write('L'.encode())
-        sleep(self.button_delay)
-        self.sock_buttons.write('l'.encode())
+        self.press("left")
     
     def press_right(self):
-        sleep(self.button_delay)
-        self.sock_buttons.send('R'.encode())
-        sleep(self.button_delay)
-        self.sock_buttons.send('r'.encode())
+        self.press("right")
 
     def press_both(self):
-        sleep(self.button_delay)
-        self.sock_buttons.send('RL'.encode())
-        sleep(self.button_delay)
-        self.sock_buttons.send('rl'.encode())
+        self.press("both")
 
