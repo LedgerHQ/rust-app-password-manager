@@ -35,9 +35,7 @@ fn main() {
         .generate()
         .expect("Unable to generate bindings");
     bindings
-        .write_to_file(
-            PathBuf::from(env::var("OUT_DIR").unwrap()).join("bindings.rs"),
-        )
+        .write_to_file(PathBuf::from(env::var("OUT_DIR").unwrap()).join("bindings.rs"))
         .expect("Could'nt write bindings");
 
     let gcc_toolchain = if sysroot.is_empty() {
