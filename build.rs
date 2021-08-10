@@ -19,11 +19,19 @@ use std::path::PathBuf;
 use std::process::Command;
 
 fn main() {
+    let output = Command::new("arm-none-eabi-gcc")
+        .arg("-print-sysroot")
+        .output()
+        .expect("failed");
+
+    let sysroot = std::str::from_utf8(&output.stdout).unwrap().trim();
+
     let bindings = bindgen::Builder::default()
         .header("./src/c/aes.h")
         .layout_tests(false)
         .use_core()
         .ctypes_prefix("cty")
+        .clang_arg(format!("--sysroot={}", sysroot))
         .generate()
         .expect("Unable to generate bindings");
     bindings
@@ -32,12 +40,6 @@ fn main() {
         )
         .expect("Could'nt write bindings");
 
-    let output = Command::new("arm-none-eabi-gcc")
-        .arg("-print-sysroot")
-        .output()
-        .expect("failed");
-
-    let sysroot = std::str::from_utf8(&output.stdout).unwrap().trim();
     let gcc_toolchain = if sysroot.is_empty() {
         String::from("/usr/include/")
     } else {
