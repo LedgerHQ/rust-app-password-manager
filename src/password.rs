@@ -101,7 +101,7 @@ impl<const N: usize> Eq for ArrayString<N> {}
 pub struct PasswordItem {
     pub name: ArrayString<32>,
     pub login: ArrayString<32>,
-    pub pass: ArrayString<32>
+    pub pass: ArrayString<32>,
 }
 
 impl PasswordItem {
@@ -109,7 +109,7 @@ impl PasswordItem {
         PasswordItem {
             name: ArrayString::new(),
             login: ArrayString::new(),
-            pass: ArrayString::new()
+            pass: ArrayString::new(),
         }
     }
 }
