@@ -54,10 +54,10 @@ enum Error {
 impl Into<Reply> for Error {
     fn into(self) -> Reply {
         match self {
-            Error::NoConsent => Reply(0x69f0 as u16),
-            Error::StorageFull => Reply(0x9210 as u16),
-            Error::EntryNotFound => Reply(0x6a88 as u16),
-            Error::DecryptFailed => Reply(0x9d60 as u16),
+            Error::NoConsent => Reply(0x69f0_u16),
+            Error::StorageFull => Reply(0x9210_u16),
+            Error::EntryNotFound => Reply(0x6a88_u16),
+            Error::DecryptFailed => Reply(0x9d60_u16),
         }
     }
 }
