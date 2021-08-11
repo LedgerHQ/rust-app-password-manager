@@ -40,6 +40,8 @@ class Automaton(SpeculosClient):
         apdu = bytes([self.cla, ins, p1, p2, len(data)]) + data
         with super().apdu_exchange_nowait(self.cla, ins, data, p1=p1, p2=p2) as response:
             while len(self.actions):
+                # Wait to be sure speculos has enough time to process
+                sleep(0.1)
                 c = self.actions[0]
                 self.actions = self.actions[1:]
                 if c == 'r':

@@ -11,24 +11,26 @@ env:
 
 jobs:
   build_fmt:
+    name: Clone, build, check, test
     runs-on: ubuntu-latest
     steps:
-      - name: arm-none-eabi-gcc
+      - name: Install arm-none-eabi-gcc
         uses: fiam/arm-none-eabi-gcc@v1.0.3
         with:
           release: '9-2019-q4'
-      - uses: actions/checkout@v2
-      - run: python3 -m pip install pillow
+      - name: Checkout
+        uses: actions/checkout@v2
       - name: Install thumbv6 target
         uses: actions-rs/toolchain@v1
         with:
           toolchain: nightly
           override: true
           target: thumbv6m-none-eabi 
-      - name: Cargo build
+      - name: Cargo build release
         uses: actions-rs/cargo@v1
         with:
           command: build
+          args: --release
       - run: rustup component add clippy
       #- name: Cargo clippy
       #  uses: actions-rs/cargo@v1
@@ -41,3 +43,12 @@ jobs:
         with:
           command: fmt
           args: --all -- --check
+      - name: Install speculos
+        run: |
+          sudo apt install qemu-user-static
+          python3 -m pip install --upgrade construct==2.10.61 pyelftools mnemonic requests jsonschema flask-restful pyqt5 pillow
+          python3 -m pip install --index-url https://test.pypi.org/simple/ speculos
+      - name: Test
+        run: |
+          python3 -m pip install pytest ledgerwallet
+          python3 -m pytest
