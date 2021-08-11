@@ -51,4 +51,4 @@ jobs:
       - name: Test
         run: |
           python3 -m pip install pytest ledgerwallet
-          python3 -m pytest
+          timeout 300 python3 -m pytest
