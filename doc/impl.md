@@ -18,22 +18,22 @@ character if it ends with a null byte).
 
 All APDUs use the class `0x80`.
 
-| INS  | Name              | Description                                                 |
-|------|-------------------|-------------------------------------------------------------|
-| 0x01 | GetVersion        | Returns version string                                      |
-| 0x02 | GetSize           | Returns the number of stored passwords                      |
-| 0x03 | Add               | Add a new password                                          |
-| 0x04 | GetName           | Returns name of the n-th password                           |
-| 0x05 | GetByName         | Return the password with the given name                     |
-| 0x06 | DeleteByName      | Delete the password with the given name                     |
-| 0x07 | Export            | Start password export procedure                             |
-| 0x08 | ExportNext        | Export the next password                                    |
-| 0x09 | Import            | Start password import procedure                             |
-| 0x0a | ImportNext        | Import the next password                                    |
-| 0x0b | Clear             | Remove all passwords                                        |
-| 0x0c | Quit              | Quit application                                            |
-| 0x0d | ShowOnScreen      | Show the password with the given name on the screen         |
-| 0x0e | HasName           | Indicate if a password with the given name is stored or not |
+| INS  | Name                          | Description                                                 |
+|------|-------------------------------|-------------------------------------------------------------|
+| 0x01 | [GetVersion](#getversion)     | Returns version string                                      |
+| 0x02 | [GetSize](#getsize)           | Returns the number of stored passwords                      |
+| 0x03 | [Add](#add)                   | Add a new password                                          |
+| 0x04 | [GetName](#getname)           | Returns name of the n-th password                           |
+| 0x05 | [GetByName](#getbyname)       | Return the password with the given name                     |
+| 0x06 | [DeleteByName](#deletebyname) | Delete the password with the given name                     |
+| 0x07 | [Export](#export)             | Start password export procedure                             |
+| 0x08 | [ExportNext](#exportnext)     | Export the next password                                    |
+| 0x09 | [Import](#import)             | Start password import procedure                             |
+| 0x0a | [ImportNext](#importnext)     | Import the next password                                    |
+| 0x0b | [Clear](#clear)               | Remove all passwords                                        |
+| 0x0c | [Quit](#quit)                 | Quit application                                            |
+| 0x0d | [ShowOnScreen](#showonscreen) | Show the password with the given name on the screen         |
+| 0x0e | [HasName](#hasname)           | Indicate if a password with the given name is stored or not |
 
 ## GetVersion
 
