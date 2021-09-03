@@ -22,6 +22,8 @@ use nanos_sdk::io::{Reply, StatusWords};
 use nanos_sdk::nvm;
 use nanos_sdk::random;
 use nanos_sdk::Pic;
+use nanos_ui::bagls;
+use nanos_ui::bagls::Displayable;
 use nanos_ui::ui;
 mod password;
 use heapless::{consts::U96, Vec};
@@ -103,6 +105,33 @@ impl TryFrom<u8> for Instruction {
     }
 }
 
+/// Basic Galois LFSR computation
+/// based on the wikipedia example...
+struct Lfsr {
+    x: u8,
+    m: u8,
+}
+
+impl Lfsr {
+    pub fn new(init_val: u8, modulus: u8) -> Lfsr {
+        if init_val == 0 {
+            return Lfsr { x: 1, m: modulus };
+        }
+        Lfsr {
+            x: init_val,
+            m: modulus,
+        }
+    }
+    pub fn next(&mut self) -> u8 {
+        let lsb = self.x & 1;
+        self.x >>= 1;
+        if lsb == 1 {
+            self.x ^= self.m;
+        }
+        self.x
+    }
+}
+
 #[no_mangle]
 extern "C" fn sample_main() {
     let mut comm = io::Comm::new();
@@ -119,11 +148,36 @@ extern "C" fn sample_main() {
         panic!();
     };
 
+    // iteration counter
+    let mut c = 0;
+    // lfsr with period 16*4 - 1 (63), all pixels divided in 8 boxes
+    let mut lfsr = Lfsr::new(u8::random() & 0x3f, 0x30);
     loop {
-        ui::SingleMessage::new("NanoPass").show();
-
         match comm.next_event() {
             io::Event::Button(ButtonEvent::BothButtonsRelease) => nanos_sdk::exit_app(0),
+            io::Event::Ticker => {
+                if c == 0 {
+                    ui::SingleMessage::new("NanoPass").show();
+                    lfsr.x = u8::random() & 0x3f;
+                } else if c >= 64 && c < 128 {
+                    let pos = lfsr.next() as i16;
+                    let (x, y) = ((pos & 15) * 8 + 1, (pos >> 4) * 8 + 1);
+                    bagls::Rect::new().pos(x, y).dims(7, 7).fill(true).paint();
+                } else if c >= 128 {
+                    if c == 128 {
+                        bagls::Rect::new().pos(1, 1).dims(7, 7).fill(true).paint();
+                    }
+                    let pos = lfsr.next() as i16;
+                    let (x, y) = ((pos & 15) * 8 + 1, (pos >> 4) * 8 + 1);
+                    bagls::Rect::new()
+                        .pos(x, y)
+                        .dims(7, 7)
+                        .colors(0, 0)
+                        .fill(true)
+                        .paint();
+                }
+                c = (c + 1) % 192;
+            }
             io::Event::Button(_) => {}
             // Get version string
             // Should comply with other apps standard
@@ -161,6 +215,7 @@ extern "C" fn sample_main() {
                     Ok(()) => StatusWords::Ok.into(),
                     Err(e) => e.into(),
                 });
+                c = 0;
             }
             // Get password name
             // This is used by the client to list the names of stored password
@@ -203,6 +258,7 @@ extern "C" fn sample_main() {
                         comm.reply(Error::EntryNotFound);
                     }
                 }
+                c = 0;
             }
 
             // Display a password on the screen only, without communicating it
@@ -232,6 +288,7 @@ extern "C" fn sample_main() {
                         comm.reply(Error::EntryNotFound);
                     }
                 }
+                c = 0;
             }
 
             // Delete password by name
@@ -257,6 +314,7 @@ extern "C" fn sample_main() {
                         comm.reply(Error::EntryNotFound);
                     }
                 }
+                c = 0;
             }
             // Export
             // P1 can be 0 for plaintext, 1 for encrypted export.
@@ -298,6 +356,7 @@ extern "C" fn sample_main() {
                         Error::NoConsent.into()
                     },
                 );
+                c = 0;
             }
             // Exit
             io::Event::Command(Instruction::Quit) => {
