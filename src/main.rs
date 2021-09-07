@@ -159,22 +159,22 @@ extern "C" fn sample_main() {
                 if c == 0 {
                     ui::SingleMessage::new("NanoPass").show();
                     lfsr.x = u8::random() & 0x3f;
-                } else if c >= 64 && c < 128 {
+                } else if c == 128 {
+                    bagls::Rect::new().pos(1, 1).dims(7, 7).fill(true).paint();
+                } else if c >= 64 {
                     let pos = lfsr.next() as i16;
-                    let (x, y) = ((pos & 15) * 8 + 1, (pos >> 4) * 8 + 1);
-                    bagls::Rect::new().pos(x, y).dims(7, 7).fill(true).paint();
-                } else if c >= 128 {
-                    if c == 128 {
-                        bagls::Rect::new().pos(1, 1).dims(7, 7).fill(true).paint();
-                    }
-                    let pos = lfsr.next() as i16;
-                    let (x, y) = ((pos & 15) * 8 + 1, (pos >> 4) * 8 + 1);
+                    let (x, y) = ((pos & 15) * 8, (pos >> 4) * 8);
                     bagls::Rect::new()
                         .pos(x, y)
-                        .dims(7, 7)
+                        .fill(false)
+                        .dims(8, 8)
                         .colors(0, 0)
-                        .fill(true)
                         .paint();
+                    let mut rect = bagls::Rect::new().pos(x + 1, y + 1).dims(7, 7).fill(true);
+                    if c > 128 {
+                        rect = rect.colors(0, 0);
+                    }
+                    rect.paint();
                 }
                 c = (c + 1) % 192;
             }
