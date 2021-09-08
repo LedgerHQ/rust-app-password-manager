@@ -46,6 +46,10 @@ static PASS_CHARS: &str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0
 /// SLIP16 path for password encryption (used during export/import)
 static BIP32_PATH: [u32; 2] = ecc::make_bip32_path(b"m/10016'/0");
 
+/// App Version parameters
+const NAME: &str = env!("CARGO_PKG_NAME");
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 enum Error {
     NoConsent,
     StorageFull,
@@ -155,6 +159,10 @@ extern "C" fn sample_main() {
     loop {
         match comm.next_event() {
             io::Event::Button(ButtonEvent::BothButtonsRelease) => nanos_sdk::exit_app(0),
+            io::Event::Button(ButtonEvent::RightButtonRelease) => {
+                display_infos(passwords);
+                c = 0;
+            }
             io::Event::Ticker => {
                 if c == 0 {
                     ui::SingleMessage::new("NanoPass").show();
@@ -182,8 +190,6 @@ extern "C" fn sample_main() {
             // Get version string
             // Should comply with other apps standard
             io::Event::Command(Instruction::GetVersion) => {
-                const NAME: &str = env!("CARGO_PKG_NAME");
-                const VERSION: &str = env!("CARGO_PKG_VERSION");
                 comm.append(&[1]); // Format
                 comm.append(&[NAME.len() as u8]);
                 comm.append(NAME.as_bytes());
@@ -378,6 +384,40 @@ extern "C" fn sample_main() {
             }
         }
     }
+}
+
+/// Conversion to a two-digit number
+fn int2dec(x: usize) -> [u8; 2] {
+    let mut t = (x % 100) as u16;
+    if t == 0 {
+        return [b' ', b'0'];
+    }
+    let mut dec = [b' '; 2];
+    dec[1] = b'0' + (t as u8) % 10;
+    t /= 10;
+    if t != 0 {
+        dec[0] = b'0' + (t as u8) % 10;
+    }
+    dec
+}
+
+/// Display global information about the app:
+/// - Current number of passwords stored
+/// - App Version
+fn display_infos(passwords: &nvm::Collection<PasswordItem, 128>) {
+    let mut stored_n = *b"   passwords";
+    let pwlen_bytes = int2dec(passwords.len());
+
+    stored_n[0] = pwlen_bytes[0];
+    stored_n[1] = pwlen_bytes[1];
+
+    // safety: int2dec returns a [u8; 2] consisting of values between
+    // '0' and '9', thus is valid utf8
+    let stored_str = unsafe { core::str::from_utf8_unchecked(&stored_n) };
+
+    const APP_VERSION_STR: &str = concat!(env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+
+    ui::Menu::new(&[APP_VERSION_STR, stored_str]).show();
 }
 
 /// Generates a random password.
