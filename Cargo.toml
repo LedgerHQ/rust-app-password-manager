@@ -15,10 +15,6 @@ nanos_ui = { git = "https://github.com/LedgerHQ/ledger-nanos-ui.git" }
 cty = "0.2.0"
 heapless = "0.5.6"
 
-[dependencies.block-modes]
-version = "0.7.0"
-default-features = false
-
 [profile.dev]
 panic = "abort"
 
