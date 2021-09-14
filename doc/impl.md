@@ -97,6 +97,8 @@ The P1 field can be:
 - 1: passwords are returned encrypted and MACed. Only a device with the same
   seed can import the returned data.
 
+This command returns the number of password entries that will be exported,
+encoded in big-endian with 4 bytes.
 Once the export procedure has been started, each password must be retrieved
 with the ExportNext command. The export procedure ends when all passwords have
 been readout.
