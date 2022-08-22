@@ -20,6 +20,8 @@ to:
 - export passwords to a JSON file,
 - import passwords from a JSON file.
 
+The application can also be used with the dedicated [chrome extension](https://github.com/LedgerHQ/nanopass-chrome-ext).
+
 ## Building and installing
 
 You can build on either Windows or Linux with a simple `cargo build` or
