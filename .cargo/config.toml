@@ -1,0 +1,6 @@
+[target.nanos]
+runner = "speculos.py -m nanos"
+
+[unstable]
+build-std = ["core"]
+build-std-features = ["compiler-builtins-mem"]
