@@ -13,10 +13,7 @@ bindgen = "0.59.2"
 nanos_sdk = { git = "https://github.com/LedgerHQ/ledger-nanos-sdk.git" }
 nanos_ui = { git = "https://github.com/LedgerHQ/ledger-nanos-ui.git" }
 cty = "0.2.0"
-heapless = "0.5.6"
-
-[profile.dev]
-panic = "abort"
+heapless = { version = "0.7.16", default-features = false }
 
 [profile.release]
 opt-level = 's' 

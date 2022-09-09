@@ -26,7 +26,7 @@ use nanos_ui::bagls;
 use nanos_ui::bagls::Displayable;
 use nanos_ui::ui;
 mod password;
-use heapless::{consts::U96, Vec};
+use heapless::Vec;
 use password::{ArrayString, PasswordItem};
 mod tinyaes;
 use core::convert::TryFrom;
@@ -537,7 +537,7 @@ fn export(
                     let mut nonce = [0u8; 16];
                     random::rand_bytes(&mut nonce);
                     comm.append(&nonce);
-                    let mut buffer: Vec<u8, U96> = Vec::new();
+                    let mut buffer: Vec<u8, 96> = Vec::new();
                     buffer.extend_from_slice(password.name.bytes()).unwrap();
                     buffer.extend_from_slice(password.login.bytes()).unwrap();
                     buffer.extend_from_slice(password.pass.bytes()).unwrap();
@@ -622,7 +622,7 @@ fn import(
                 let mut decrypt_failed = false;
                 if encrypted {
                     let nonce = comm.get(5, 5 + 16);
-                    let mut buffer: Vec<u8, U96> = Vec::new();
+                    let mut buffer: Vec<u8, 96> = Vec::new();
                     buffer
                         .extend_from_slice(comm.get(5 + 16, 5 + 16 + 96))
                         .unwrap();
