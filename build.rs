@@ -32,11 +32,12 @@ fn main() {
         .use_core()
         .ctypes_prefix("cty")
         .clang_arg(format!("--sysroot={}", sysroot))
+        .clang_arg("--target=thumbv6m-none-eabi")
         .generate()
         .expect("Unable to generate bindings");
     bindings
         .write_to_file(PathBuf::from(env::var("OUT_DIR").unwrap()).join("bindings.rs"))
-        .expect("Could'nt write bindings");
+        .expect("Couldn't write bindings");
 
     let gcc_toolchain = if sysroot.is_empty() {
         String::from("/usr/include/")
@@ -53,10 +54,7 @@ fn main() {
         .file("./src/c/aes.c")
         .include(gcc_toolchain)
         // More or less same flags as in the C SDK Makefile.defines
-        .no_default_flags(true)
-        .pic(true)
         .flag("-fropi")
-        .flag("--target=thumbv6m-none-eabi")
         .flag("-fomit-frame-pointer")
         .flag("-mcpu=cortex-m0")
         .flag("-fno-common")
@@ -65,22 +63,8 @@ fn main() {
         .flag("-mtune=cortex-m0")
         .flag("-mthumb")
         .flag("-fno-jump-tables")
-        .flag("-fno-builtin")
         .flag("-fshort-enums")
         .flag("-mno-unaligned-access")
         .flag("-Wno-unused-command-line-argument")
-        .flag("-Wno-missing-declarations")
-        .flag("-Wno-unused-parameter")
-        .flag("-Wno-implicit-fallthrough")
-        .flag("-Wno-sign-compare")
-        .flag("-Wno-unknown-pragmas")
-        .flag("-Wno-unknown-attributes")
-        .flag("-Wno-pointer-sign")
-        .flag("-Wno-implicit-function-declaration")
-        .flag("-Wno-tautological-pointer-compare")
-        .flag("-Wno-incompatible-pointer-types-discards-qualifiers")
-        .flag("-Wno-duplicate-decl-specifier")
-        .flag("-Wno-#warnings")
-        .flag("-Wno-int-conversion")
         .compile("aes");
 }
