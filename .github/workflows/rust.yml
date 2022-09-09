@@ -5,50 +5,50 @@ on:
     branches: [ master ]
   pull_request:
     branches: [ master ]
+  workflow_dispatch:
+    inputs: 
+      name: 
+        description: 'Manually triggered'
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build_fmt:
-    name: Clone, build, check, test
+  build_clippy_fmt:
     runs-on: ubuntu-latest
     steps:
-      - name: Install arm-none-eabi-gcc
+      - name: arm-none-eabi-gcc
         uses: fiam/arm-none-eabi-gcc@v1.0.3
         with:
           release: '9-2019-q4'
       - name: Checkout
-        uses: actions/checkout@v2
-      - name: Install thumbv6 target
-        uses: actions-rs/toolchain@v1
+        uses: actions/checkout@v3
+      - name: Checkout SDK (targets)
+        uses: actions/checkout@v3
+        with:
+          repository: 'LedgerHQ/ledger-nanos-sdk'
+          path: rsdk
+      - name: Install clang
+        run: sudo apt-get update && sudo apt install -y clang
+      - uses: actions-rs/toolchain@v1
         with:
           toolchain: nightly
           override: true
-          target: thumbv6m-none-eabi 
-      - name: Cargo build release
+          components: rust-src, rustfmt, clippy
+      - name: Cargo build
         uses: actions-rs/cargo@v1
         with:
           command: build
-          args: --release
+          args: -Z build-std=core -Z build-std-features=compiler-builtins-mem --target ./rsdk/nanos.json
       - run: rustup component add clippy
-      #- name: Cargo clippy
-      #  uses: actions-rs/cargo@v1
-      #  with:
-      #    command: clippy
-      #    args: -- -D warnings
+      - name: Cargo clippy
+        uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: -Z build-std=core -Z build-std-features=compiler-builtins-mem --target ./rsdk/nanos.json
       - run: rustup component add rustfmt
       - name: Cargo fmt
         uses: actions-rs/cargo@v1
         with:
           command: fmt
           args: --all -- --check
-      - name: Install speculos
-        run: |
-          sudo apt install qemu-user-static
-          python3 -m pip install --upgrade construct==2.10.61 pyelftools mnemonic requests jsonschema flask-restful pyqt5 pillow
-          python3 -m pip install --index-url https://test.pypi.org/simple/ speculos
-      - name: Test
-        run: |
-          python3 -m pip install pytest ledgerwallet
-          timeout 300 python3 -m pytest
