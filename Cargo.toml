@@ -22,6 +22,6 @@ lto = true
 [package.metadata.nanos]
 curve = "secp256k1"
 flags = "0"
-icon = "crab.gif"
-icon_small = "crab.gif"
+icon = "key_16x16.gif"
+icon_small = "key_14x14.gif"
 path = ""
