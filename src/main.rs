@@ -21,7 +21,7 @@ use nanos_sdk::io;
 use nanos_sdk::io::{Reply, StatusWords};
 use nanos_sdk::nvm;
 use nanos_sdk::random;
-use nanos_sdk::Pic;
+use nanos_sdk::NVMData;
 use nanos_ui::bagls;
 use nanos_ui::bagls::Displayable;
 use nanos_ui::ui;
@@ -34,11 +34,10 @@ use core::mem::MaybeUninit;
 
 nanos_sdk::set_panic!(nanos_sdk::exiting_panic);
 
-#[no_mangle]
-#[link_section = ".nvm_data"]
 /// Stores all passwords in Non-Volatile Memory
-static mut PASSWORDS: Pic<nvm::Collection<PasswordItem, 128>> =
-    Pic::new(nvm::Collection::new(PasswordItem::new()));
+#[link_section = ".nvm_data"]
+static mut PASSWORDS: NVMData<nvm::Collection<PasswordItem, 128>> =
+    NVMData::new(nvm::Collection::new(PasswordItem::new()));
 
 /// Possible characters for the randomly generated passwords
 static PASS_CHARS: &str = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
