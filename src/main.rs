@@ -23,7 +23,7 @@ use nanos_sdk::nvm;
 use nanos_sdk::random;
 use nanos_sdk::NVMData;
 use nanos_ui::bagls;
-use nanos_ui::bagls::Displayable;
+use nanos_ui::layout::Draw;
 use nanos_ui::ui;
 mod password;
 use heapless::Vec;
@@ -142,7 +142,7 @@ extern "C" fn sample_main() {
     // Don't use PASSWORDS directly in the program. It is static and using
     // it requires using unsafe everytime. Instead, take a reference here, so
     // in the rest of the program the borrow checker will be able to detect
-    // missuses correctly.
+    // misuses correctly.
     let mut passwords = unsafe { PASSWORDS.get_mut() };
 
     // Encryption/decryption key for import and export.
@@ -161,25 +161,38 @@ extern "C" fn sample_main() {
                 c = 0;
             }
             io::Event::Ticker => {
+                let y_offset = ((nanos_ui::SCREEN_HEIGHT as i32) / 2) - 16;
                 if c == 0 {
+                    bagls::RectFull::new()
+                        .pos(0, y_offset)
+                        .width(8)
+                        .height(8)
+                        .erase();
                     ui::SingleMessage::new("NanoPass").show();
-                    lfsr.x = u8::random() & 0x3f;
+                    lfsr = Lfsr::new(u8::random() & 0x3f, 0x30);
                 } else if c == 128 {
-                    bagls::Rect::new().pos(1, 1).dims(7, 7).fill(true).paint();
+                    bagls::RectFull::new()
+                        .pos(1, y_offset + 1)
+                        .width(7)
+                        .height(7)
+                        .display();
                 } else if c >= 64 {
-                    let pos = lfsr.next() as i16;
+                    let pos = lfsr.next();
                     let (x, y) = ((pos & 15) * 8, (pos >> 4) * 8);
-                    bagls::Rect::new()
-                        .pos(x, y)
-                        .fill(false)
-                        .dims(8, 8)
-                        .colors(0, 0)
-                        .paint();
-                    let mut rect = bagls::Rect::new().pos(x + 1, y + 1).dims(7, 7).fill(true);
+                    bagls::RectFull::new()
+                        .pos(x.into(), (y_offset + y as i32).into())
+                        .width(8)
+                        .height(8)
+                        .erase();
+                    let rect = bagls::RectFull::new()
+                        .pos((x + 1).into(), (y_offset + y as i32 + 1).into())
+                        .width(7)
+                        .height(7);
                     if c > 128 {
-                        rect = rect.colors(0, 0);
+                        rect.erase();
+                    } else {
+                        rect.display();
                     }
-                    rect.paint();
                 }
                 c = (c + 1) % 192;
             }
