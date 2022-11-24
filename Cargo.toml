@@ -20,6 +20,7 @@ opt-level = 's'
 lto = true
 
 [package.metadata.nanos]
+name = "NanoPass"
 curve = "secp256k1"
 flags = "0"
 icon = "key_16x16.gif"
