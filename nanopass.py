@@ -265,6 +265,7 @@ def getinternal(ctx, name):
 def list(ctx):
     dev = ctx.obj['DEV']
     entries = dev.get_names()
+    entries.sort()
     for entry in entries:
         print('-', entry)
 
