@@ -20,9 +20,10 @@ opt-level = 's'
 lto = true
 
 [package.metadata.nanos]
+api_level = "1"
 name = "NanoPass"
-curve = "secp256k1"
+curve = ["secp256k1"]
 flags = "0"
 icon = "key_16x16.gif"
 icon_small = "key_14x14.gif"
-path = ""
+path = [""]
