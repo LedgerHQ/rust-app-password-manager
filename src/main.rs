@@ -18,6 +18,7 @@
 use nanos_sdk::buttons::ButtonEvent;
 use nanos_sdk::ecc;
 use nanos_sdk::io;
+use nanos_sdk::io::ApduHeader;
 use nanos_sdk::io::{Reply, StatusWords};
 use nanos_sdk::nvm;
 use nanos_sdk::random;
@@ -84,11 +85,11 @@ enum Instruction {
     HasName,
 }
 
-impl TryFrom<u8> for Instruction {
+impl TryFrom<ApduHeader> for Instruction {
     type Error = ();
 
-    fn try_from(v: u8) -> Result<Self, Self::Error> {
-        match v {
+    fn try_from(v: ApduHeader) -> Result<Self, Self::Error> {
+        match v.ins {
             0x01 => Ok(Self::GetVersion),
             0x02 => Ok(Self::GetSize),
             0x03 => Ok(Self::Add),
@@ -223,7 +224,7 @@ extern "C" fn sample_main() {
                 offset += 32;
                 let login = ArrayString::<32>::from_bytes(comm.get(offset, offset + 32));
                 offset += 32;
-                let pass = match comm.get_p1() {
+                let pass = match comm.get_apdu_metadata().p1 {
                     0 => Some(ArrayString::<32>::from_bytes(comm.get(offset, offset + 32))),
                     _ => None,
                 };
@@ -334,7 +335,7 @@ extern "C" fn sample_main() {
             }
             // Export
             // P1 can be 0 for plaintext, 1 for encrypted export.
-            io::Event::Command(Instruction::Export) => match comm.get_p1() {
+            io::Event::Command(Instruction::Export) => match comm.get_apdu_metadata().p1 {
                 0 => export(&mut comm, &passwords, None),
                 1 => export(&mut comm, &passwords, Some(&enc_key)),
                 _ => comm.reply(StatusWords::Unknown),
@@ -345,7 +346,7 @@ extern "C" fn sample_main() {
             }
             // Import
             // P1 can be 0 for plaintext, 1 for encrypted import.
-            io::Event::Command(Instruction::Import) => match comm.get_p1() {
+            io::Event::Command(Instruction::Import) => match comm.get_apdu_metadata().p1 {
                 0 => import(&mut comm, &mut passwords, None),
                 1 => import(&mut comm, &mut passwords, Some(&enc_key)),
                 _ => comm.reply(StatusWords::Unknown),
