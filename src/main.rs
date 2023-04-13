@@ -147,7 +147,7 @@ extern "C" fn sample_main() {
 
     // Encryption/decryption key for import and export.
     let mut enc_key = [0u8; 32];
-    ecc::bip32_derive(ecc::CurvesId::Secp256k1, &BIP32_PATH, &mut enc_key);
+    let _ = ecc::bip32_derive(ecc::CurvesId::Secp256k1, &BIP32_PATH, &mut enc_key);
 
     // iteration counter
     let mut c = 0;
