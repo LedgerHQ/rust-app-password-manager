@@ -22,9 +22,15 @@ to:
 
 The application can also be used with the dedicated [chrome extension](https://github.com/LedgerHQ/nanopass-chrome-ext).
 
+## Prerequisites
+
+* Install [cargo-ledger](https://github.com/LedgerHQ/cargo-ledger): `cargo install --git https://github.com/LedgerHQ/cargo-ledger`
+* Run `cargo ledger setup`
+* Install `arm-none-eabi-gcc` from <https://developer.arm.com/downloads/-/gnu-rm>
+
 ## Building and installing
 
-You can build on either Windows or Linux with a simple `cargo build` or
+You can build on either Windows or Linux with a simple `cargo build --target <yourtarget>` (eg `--target nanosplus`) or
 `cargo build --release`.
 
 You can use
