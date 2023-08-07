@@ -1,7 +1,10 @@
-# A Password Manager for NanoS, written in Rust
+# A Password Manager for Ledger Devices
 
-A simple password manager application for NanoS, with command-line interface
-similar to Unix pass.
+A simple password manager application for Ledger devices, with command-line
+interface similar to Unix pass. Works on Nano S, Nano S Plus and Nano X.
+
+Up to 128 login/password entries can be stored. Passwords can be exported
+encrypted to a file, and imported on another device sharing the same seed.
 
 ![Demo animation](doc/demo.gif)
 
