@@ -30,13 +30,10 @@ The application can also be used with the dedicated [chrome extension](https://g
 
 ## Building and installing
 
-You can build on either Windows or Linux with a simple `cargo build --target <yourtarget>` (eg `--target nanosplus`) or
-`cargo build --release`.
-
 You can use
 [cargo-ledger](https://github.com/ledgerhq/cargo-ledger) which
 builds, outputs a `hex` file and a manifest file for `ledgerctl`, and loads it
-on a device in a single `cargo ledger load` command in your app directory.
+on a device in a single `cargo ledger build nanos --load` command in your app directory.
 
 ## License
 
