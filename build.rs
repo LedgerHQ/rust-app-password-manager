@@ -19,6 +19,9 @@ use std::path::PathBuf;
 use std::process::Command;
 
 fn main() {
+
+    println!("cargo:rerun-if-changed=src/aes.c");
+
     let output = Command::new("arm-none-eabi-gcc")
         .arg("-print-sysroot")
         .output()

@@ -1,0 +1,18 @@
+{
+  "apiLevel": "15",
+  "binary": "target/stax/release/app.hex",
+  "dataSize": 24576,
+  "derivationPath": {
+    "curves": [
+      "secp256k1"
+    ],
+    "paths": [
+      "10016'"
+    ]
+  },
+  "flags": "0x200",
+  "icon": "crab_32x32.gif",
+  "name": "NanoPass",
+  "targetId": "0x33200004",
+  "version": "1.2.1"
+}

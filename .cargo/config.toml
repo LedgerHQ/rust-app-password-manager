@@ -1,6 +1,9 @@
-[target.nanos]
-runner = "speculos.py -m nanos"
+[target.nanosplus]
+runner = "speculos -a=1 --model=nanosp"
+
+[build]
+target = "stax"
 
 [unstable]
-build-std = ["core"]
+build-std = ["core", "alloc"]
 build-std-features = ["compiler-builtins-mem"]

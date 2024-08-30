@@ -1,4 +1,4 @@
-// Copyright 2020 Ledger SAS
+// Copyright 2024 Ledger SAS
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -15,25 +15,37 @@
 #![no_std]
 #![no_main]
 
-use nanos_sdk::buttons::ButtonEvent;
-use nanos_sdk::ecc;
-use nanos_sdk::io;
-use nanos_sdk::io::ApduHeader;
-use nanos_sdk::io::{Reply, StatusWords};
-use nanos_sdk::nvm;
-use nanos_sdk::random;
-use nanos_sdk::NVMData;
-use nanos_ui::bagls;
-use nanos_ui::layout::Draw;
-use nanos_ui::ui;
+use ledger_secure_sdk_sys;
+use ledger_device_sdk::{io};
+use ledger_device_sdk::io::{ApduHeader, Reply, StatusWords, Event, Comm};
+use ledger_device_sdk::{ecc, nvm, NVMData};
+use ledger_device_sdk::random::{rand_bytes, Random};
+#[cfg(not(any(target_os = "stax", target_os = "flex")))]
+use ledger_device_sdk::ui::{bagls, SCREEN_HEIGHT};
 mod password;
 use heapless::Vec;
 use password::{ArrayString, PasswordItem};
 mod tinyaes;
-use core::convert::TryFrom;
 use core::mem::MaybeUninit;
+use include_gif::include_gif;
+#[cfg(any(target_os = "stax", target_os = "flex"))]
+use ledger_device_sdk::nbgl::{NbglGlyph, NbglHomeAndSettings};
+#[cfg(any(target_os = "stax", target_os = "flex"))]
+use ledger_device_sdk::nbgl::{init_comm, NbglStatus, NbglChoice, NbglSpinner};
+#[cfg(not(any(target_os = "stax", target_os = "flex")))]
+use ledger_device_sdk::ui::bitmaps::{CERTIFICATE, DASHBOARD_X, Glyph};
 
-nanos_sdk::set_panic!(nanos_sdk::exiting_panic);
+#[cfg(feature = "pending_review_screen")]
+#[cfg(not(any(target_os = "stax", target_os = "flex")))]
+use ledger_device_sdk::ui::gadgets::display_pending_review;
+#[cfg(not(any(target_os = "stax", target_os = "flex")))]
+use ledger_device_sdk::ui::gadgets::{Menu, MessageValidator, popup, SingleMessage};
+#[cfg(not(any(target_os = "stax", target_os = "flex")))]
+use ledger_device_sdk::ui::gadgets::{EventOrPageIndex, MultiPageMenu, Page};
+#[cfg(not(any(target_os = "stax", target_os = "flex")))]
+use ledger_device_sdk::ui::layout::Draw;
+
+ledger_device_sdk::set_panic!(ledger_device_sdk::exiting_panic);
 
 /// Stores all passwords in Non-Volatile Memory
 #[link_section = ".nvm_data"]
@@ -50,25 +62,29 @@ static BIP32_PATH: [u32; 2] = ecc::make_bip32_path(b"m/10016'/0");
 const NAME: &str = env!("CARGO_PKG_NAME");
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-enum Error {
-    NoConsent,
-    StorageFull,
-    EntryNotFound,
-    DecryptFailed,
+
+#[repr(u16)]
+pub enum Error {
+    NoConsent = 0x69f0_u16,
+    StorageFull = 0x9210_u16,
+    EntryNotFound = 0x6a88_u16,
+    DecryptFailed = 0x9d60_u16,
+    InsNotSupported
 }
 
-impl Into<Reply> for Error {
-    fn into(self) -> Reply {
-        match self {
-            Error::NoConsent => Reply(0x69f0_u16),
-            Error::StorageFull => Reply(0x9210_u16),
-            Error::EntryNotFound => Reply(0x6a88_u16),
-            Error::DecryptFailed => Reply(0x9d60_u16),
-        }
+pub enum AppSW {
+    Deny = 0x6985,
+    Ok = 0x9000,
+}
+
+impl From<Error> for Reply {
+    fn from(sw: Error) -> Reply {
+        Reply(sw as u16)
     }
 }
 
-enum Instruction {
+/// Possible input commands received through APDUs.
+pub enum Instruction {
     GetVersion,
     GetSize,
     Add,
@@ -86,7 +102,7 @@ enum Instruction {
 }
 
 impl TryFrom<ApduHeader> for Instruction {
-    type Error = ();
+    type Error = Error;
 
     fn try_from(v: ApduHeader) -> Result<Self, Self::Error> {
         match v.ins {
@@ -104,7 +120,7 @@ impl TryFrom<ApduHeader> for Instruction {
             0x0c => Ok(Self::Quit),
             0x0d => Ok(Self::ShowOnScreen),
             0x0e => Ok(Self::HasName),
-            _ => Err(()),
+            _ => Err(Error::InsNotSupported),
         }
     }
 }
@@ -138,7 +154,21 @@ impl Lfsr {
 
 #[no_mangle]
 extern "C" fn sample_main() {
-    let mut comm = io::Comm::new();
+    // Create the communication manager, and configure it to accept only APDU from the 0xe0 class.
+    // If any APDU with a wrong class value is received, comm will respond automatically with
+    // BadCla status word.
+    let mut comm = Comm::new().set_expected_cla(0x80);
+
+    // Initialize reference to Comm instance for NBGL
+    // API calls.
+    #[cfg(any(target_os = "stax", target_os = "flex"))]
+    init_comm(&mut comm);
+
+    // Developer mode / pending review popup
+    // must be cleared with user interaction
+    #[cfg(feature = "pending_review_screen")]
+    #[cfg(not(any(target_os = "stax", target_os = "flex")))]
+    display_pending_review(&mut comm);
 
     // Don't use PASSWORDS directly in the program. It is static and using
     // it requires using unsafe everytime. Instead, take a reference here, so
@@ -148,253 +178,314 @@ extern "C" fn sample_main() {
 
     // Encryption/decryption key for import and export.
     let mut enc_key = [0u8; 32];
-    let _ = ecc::bip32_derive(ecc::CurvesId::Secp256k1, &BIP32_PATH, &mut enc_key);
+    let _ = ecc::bip32_derive(ecc::CurvesId::Secp256k1, &BIP32_PATH, &mut enc_key, None);
 
     // iteration counter
-    let mut c = 0;
     // lfsr with period 16*4 - 1 (63), all pixels divided in 8 boxes
     let mut lfsr = Lfsr::new(u8::random() & 0x3f, 0x30);
+    let mut c: i32 = 0;
     loop {
-        match comm.next_event() {
-            io::Event::Button(ButtonEvent::BothButtonsRelease) => nanos_sdk::exit_app(0),
-            io::Event::Button(ButtonEvent::RightButtonRelease) => {
-                display_infos(passwords);
-                c = 0;
-            }
-            io::Event::Ticker => {
-                let y_offset = ((nanos_ui::SCREEN_HEIGHT as i32) / 2) - 16;
-                if c == 0 {
-                    bagls::RectFull::new()
-                        .pos(0, y_offset)
-                        .width(8)
-                        .height(8)
-                        .erase();
-                    ui::SingleMessage::new("NanoPass").show();
-                    lfsr = Lfsr::new(u8::random() & 0x3f, 0x30);
-                } else if c == 128 {
-                    bagls::RectFull::new()
-                        .pos(1, y_offset + 1)
-                        .width(7)
-                        .height(7)
-                        .display();
-                } else if c >= 64 {
-                    let pos = lfsr.next();
-                    let (x, y) = ((pos & 15) * 8, (pos >> 4) * 8);
-                    bagls::RectFull::new()
-                        .pos(x.into(), (y_offset + y as i32).into())
-                        .width(8)
-                        .height(8)
-                        .erase();
-                    let rect = bagls::RectFull::new()
-                        .pos((x + 1).into(), (y_offset + y as i32 + 1).into())
-                        .width(7)
-                        .height(7);
-                    if c > 128 {
-                        rect.erase();
-                    } else {
-                        rect.display();
+        // Wait for either a specific button push to exit the app
+        // or an APDU command
+        if let Event::Command(ins) = display_infos(&mut comm) {
+            match ins {
+                // Get version string
+                // Should comply with other apps standard
+                Instruction::GetVersion => {
+                    comm.append(&[1]); // Format
+                    comm.append(&[NAME.len() as u8]);
+                    comm.append(NAME.as_bytes());
+                    comm.append(&[VERSION.len() as u8]);
+                    comm.append(VERSION.as_bytes());
+                    comm.append(&[0]); // No flags
+                    comm.reply_ok();
+                },
+                // Get number of stored passwords
+                Instruction::GetSize => {
+                    let len: [u8; 4] = passwords.len().to_be_bytes();
+                    comm.append(&len);
+                    comm.reply_ok();
+                },
+                // Add a password
+                // If P1 == 0, password is in the data
+                // If P1 == 1, password must be generated by the device
+                Instruction::Add => {
+                    let mut offset = 5;
+                    let name = ArrayString::<32>::from_bytes(comm.get(offset, offset + 32));
+                    offset += 32;
+                    let login = ArrayString::<32>::from_bytes(comm.get(offset, offset + 32));
+                    offset += 32;
+                    let pass = match comm.get_apdu_metadata().p1 {
+                        0 => Some(ArrayString::<32>::from_bytes(comm.get(offset, offset + 32))),
+                        _ => None,
+                    };
+                    comm.reply::<Reply>(match set_password(passwords, &name, &login, &pass) {
+                        Ok(()) => StatusWords::Ok.into(),
+                        Err(e) => e.into(),
+                    });
+                    c = 0;
+                },
+                // Get password name
+                // This is used by the client to list the names of stored password
+                // Login is not returned.
+                Instruction::GetName => {
+                    let mut index_bytes = [0; 4];
+                    index_bytes.copy_from_slice(comm.get(5, 5 + 4));
+                    let index = u32::from_be_bytes(index_bytes);
+                    match passwords.get(index as usize) {
+                        Some(password) => {
+                            comm.append(password.name.bytes());
+                            comm.reply_ok()
+                        }
+                        None => comm.reply(Error::EntryNotFound),
                     }
-                }
-                c = (c + 1) % 192;
-            }
-            io::Event::Button(_) => {}
-            // Get version string
-            // Should comply with other apps standard
-            io::Event::Command(Instruction::GetVersion) => {
-                comm.append(&[1]); // Format
-                comm.append(&[NAME.len() as u8]);
-                comm.append(NAME.as_bytes());
-                comm.append(&[VERSION.len() as u8]);
-                comm.append(VERSION.as_bytes());
-                comm.append(&[0]); // No flags
-                comm.reply_ok();
-            }
-            // Get number of stored passwords
-            io::Event::Command(Instruction::GetSize) => {
-                let len: [u8; 4] = passwords.len().to_be_bytes();
-                comm.append(&len);
-                comm.reply_ok();
-            }
-            // Add a password
-            // If P1 == 0, password is in the data
-            // If P1 == 1, password must be generated by the device
-            io::Event::Command(Instruction::Add) => {
-                let mut offset = 5;
-                let name = ArrayString::<32>::from_bytes(comm.get(offset, offset + 32));
-                offset += 32;
-                let login = ArrayString::<32>::from_bytes(comm.get(offset, offset + 32));
-                offset += 32;
-                let pass = match comm.get_apdu_metadata().p1 {
-                    0 => Some(ArrayString::<32>::from_bytes(comm.get(offset, offset + 32))),
-                    _ => None,
-                };
-                comm.reply::<Reply>(match set_password(passwords, &name, &login, &pass) {
-                    Ok(()) => StatusWords::Ok.into(),
-                    Err(e) => e.into(),
-                });
-                c = 0;
-            }
-            // Get password name
-            // This is used by the client to list the names of stored password
-            // Login is not returned.
-            io::Event::Command(Instruction::GetName) => {
-                let mut index_bytes = [0; 4];
-                index_bytes.copy_from_slice(comm.get(5, 5 + 4));
-                let index = u32::from_be_bytes(index_bytes);
-                match passwords.get(index as usize) {
-                    Some(password) => {
-                        comm.append(password.name.bytes());
-                        comm.reply_ok()
-                    }
-                    None => comm.reply(Error::EntryNotFound),
-                }
-            }
-            // Get password by name
-            // Returns login and password data.
-            io::Event::Command(Instruction::GetByName) => {
-                let name = ArrayString::<32>::from_bytes(comm.get(5, 5 + 32));
+                },
+                // Get password by name
+                // Returns login and password data.
+                Instruction::GetByName => {
+                    let name = ArrayString::<32>::from_bytes(comm.get(5, 5 + 32));
 
-                match passwords.into_iter().find(|&&x| x.name == name) {
-                    Some(&p) => {
-                        if ui::MessageValidator::new(
-                            &[name.as_str()],
-                            &[&"Read", &"password"],
-                            &[&"Cancel"],
-                        )
-                        .ask()
-                        {
-                            comm.append(p.login.bytes());
-                            comm.append(p.pass.bytes());
-                            comm.reply_ok();
-                        } else {
-                            comm.reply(Error::NoConsent);
+                    match passwords.into_iter().find(|&&x| x.name == name) {
+                        Some(&p) => {
+                            if validate(
+                                &[&"Get password"],
+                                &[name.as_str()],
+                                &[&"Read password"],
+                                &[&"Cancel"],
+                            )
+                            {
+                                comm.append(p.login.bytes());
+                                comm.append(p.pass.bytes());
+                                comm.reply_ok();
+                                NbglStatus::new().text("").show(true);
+                            } else {
+                                comm.reply(Error::NoConsent);
+                                NbglStatus::new().text("").show(false);
+                            }
+                        }
+                        None => {
+                            // Password not found
+                            comm.reply(Error::EntryNotFound);
                         }
                     }
-                    None => {
-                        // Password not found
-                        comm.reply(Error::EntryNotFound);
-                    }
-                }
-                c = 0;
-            }
+                    c = 0;
+                },
 
-            // Display a password on the screen only, without communicating it
-            // to the host.
-            io::Event::Command(Instruction::ShowOnScreen) => {
-                let name = ArrayString::<32>::from_bytes(comm.get(5, 5 + 32));
+                // Display a password on the screen only, without communicating it
+                // to the host.
+                Instruction::ShowOnScreen => {
+                    let name = ArrayString::<32>::from_bytes(comm.get(5, 5 + 32));
 
-                match passwords.into_iter().find(|&&x| x.name == name) {
-                    Some(&p) => {
-                        if ui::MessageValidator::new(
-                            &[name.as_str()],
-                            &[&"Read", &"password"],
-                            &[&"Cancel"],
-                        )
-                        .ask()
-                        {
-                            ui::popup(p.login.as_str());
-                            ui::popup(p.pass.as_str());
-                            comm.reply_ok();
-                        } else {
-                            ui::popup("Operation cancelled");
-                            comm.reply(Error::NoConsent);
+                    match passwords.into_iter().find(|&&x| x.name == name) {
+                        Some(&p) => {
+                            if validate(
+                                &[&"Show password on the device"] ,
+                                &[name.as_str()],
+                                &[&"Read password"],
+                                &[&"Cancel"],
+                            )
+                            {
+                                popup(p.login.as_str());
+                                popup(p.pass.as_str());
+                                comm.reply_ok();
+                            } else {
+                                popup("Operation cancelled");
+                                comm.reply(Error::NoConsent);
+                            }
+                        }
+                        None => {
+                            popup("Password not found");
+                            comm.reply(Error::EntryNotFound);
                         }
                     }
-                    None => {
-                        ui::popup("Password not found");
-                        comm.reply(Error::EntryNotFound);
-                    }
-                }
-                c = 0;
-            }
+                    c = 0;
+                },
 
-            // Delete password by name
-            io::Event::Command(Instruction::DeleteByName) => {
-                let name = ArrayString::<32>::from_bytes(comm.get(5, 5 + 32));
-                match passwords.into_iter().position(|x| x.name == name) {
-                    Some(p) => {
-                        if ui::MessageValidator::new(
-                            &[name.as_str()],
-                            &[&"Remove", &"password"],
-                            &[&"Cancel"],
-                        )
-                        .ask()
-                        {
-                            passwords.remove(p);
-                            comm.reply_ok();
-                        } else {
-                            comm.reply(Error::NoConsent);
+                // Delete password by name
+                Instruction::DeleteByName => {
+                    let name = ArrayString::<32>::from_bytes(comm.get(5, 5 + 32));
+                    match passwords.into_iter().position(|x| x.name == name) {
+                        Some(p) => {
+                            if
+                            validate(
+                                &[&"Delete password"],
+                                &[name.as_str()],
+                                &[&"Remove password"],
+                                &[&"Cancel"],
+                            )
+                            {
+                                passwords.remove(p);
+                                comm.reply_ok();
+                                NbglStatus::new().text("Password deleted").show(true);
+                            } else {
+                                comm.reply(Error::NoConsent);
+                                NbglStatus::new().text("Operation rejected").show(false);
+                            }
+                        }
+                        None => {
+                            // Password not found
+                            comm.reply(Error::EntryNotFound);
                         }
                     }
-                    None => {
-                        // Password not found
-                        comm.reply(Error::EntryNotFound);
-                    }
-                }
-                c = 0;
-            }
-            // Export
-            // P1 can be 0 for plaintext, 1 for encrypted export.
-            io::Event::Command(Instruction::Export) => match comm.get_apdu_metadata().p1 {
-                0 => export(&mut comm, &passwords, None),
-                1 => export(&mut comm, &passwords, Some(&enc_key)),
-                _ => comm.reply(StatusWords::Unknown),
-            },
-            // Reserved for export
-            io::Event::Command(Instruction::ExportNext) => {
-                comm.reply(StatusWords::Unknown);
-            }
-            // Import
-            // P1 can be 0 for plaintext, 1 for encrypted import.
-            io::Event::Command(Instruction::Import) => match comm.get_apdu_metadata().p1 {
-                0 => import(&mut comm, &mut passwords, None),
-                1 => import(&mut comm, &mut passwords, Some(&enc_key)),
-                _ => comm.reply(StatusWords::Unknown),
-            },
-            // Reserved for import
-            io::Event::Command(Instruction::ImportNext) => {
-                comm.reply(StatusWords::Unknown);
-            }
-            io::Event::Command(Instruction::Clear) => {
-                // Remove all passwords
-                comm.reply::<Reply>(
-                    if ui::MessageValidator::new(&[], &[&"Remove all", &"passwords"], &[&"Cancel"])
-                        .ask()
-                    {
-                        if ui::MessageValidator::new(&[], &[&"Are you", &"sure?"], &[&"Cancel"])
-                            .ask()
+                    c = 0;
+                },
+                // Export
+                // P1 can be 0 for plaintext, 1 for encrypted export.
+                Instruction::Export => match comm.get_apdu_metadata().p1 {
+                    0 => export(&mut comm, &passwords, None),
+                    1 => export(&mut comm, &passwords, Some(&enc_key)),
+                    _ => comm.reply(StatusWords::Unknown),
+                },
+                // Reserved for export
+                Instruction::ExportNext => {
+                    comm.reply(StatusWords::Unknown);
+                },
+                // Import
+                // P1 can be 0 for plaintext, 1 for encrypted import.
+                Instruction::Import => match comm.get_apdu_metadata().p1 {
+                    0 => import(&mut comm, &mut passwords, None),
+                    1 => import(&mut comm, &mut passwords, Some(&enc_key)),
+                    _ => comm.reply(StatusWords::Unknown),
+                },
+                // Reserved for import
+                Instruction::ImportNext => {
+                    comm.reply(StatusWords::Unknown);
+                },
+                Instruction::Clear => {
+                    // Remove all passwords
+                    comm.reply::<Reply>(
+                        if validate(&[], &[&"Remove all passwords"], &[&"Confirm"], &[&"Cancel"])
                         {
-                            passwords.clear();
-                            StatusWords::Ok.into()
+                            if validate(&[], &[&"Are you sure?"], &[&"Confirm"], &[&"Cancel"])
+                            {
+                                passwords.clear();
+                                NbglStatus::new().text("All password are removed").show(true);
+                                StatusWords::Ok.into()
+                            } else {
+                                NbglStatus::new().text("Operation rejected").show(false);
+                                Error::NoConsent.into()
+                            }
                         } else {
+                            NbglStatus::new().text("Operation rejected").show(false);
                             Error::NoConsent.into()
+                        },
+                    );
+                    c = 0;
+                },
+                // Exit
+                Instruction::Quit => {
+                    comm.reply_ok();
+                    ledger_secure_sdk_sys::exit_app(0);
+                },
+                // HasName
+                Instruction::HasName => {
+                    let name = ArrayString::<32>::from_bytes(comm.get(5, 5 + 32));
+                    match passwords.into_iter().find(|&&x| x.name == name) {
+                        Some(_) => {
+                            comm.append(&[1]);
                         }
-                    } else {
-                        Error::NoConsent.into()
-                    },
-                );
-                c = 0;
-            }
-            // Exit
-            io::Event::Command(Instruction::Quit) => {
-                comm.reply_ok();
-                nanos_sdk::exit_app(0);
-            }
-            // HasName
-            io::Event::Command(Instruction::HasName) => {
-                let name = ArrayString::<32>::from_bytes(comm.get(5, 5 + 32));
-                match passwords.into_iter().find(|&&x| x.name == name) {
-                    Some(_) => {
-                        comm.append(&[1]);
+                        None => {
+                            comm.append(&[0]);
+                        }
                     }
-                    None => {
-                        comm.append(&[0]);
-                    }
-                }
-                comm.reply_ok();
+                    comm.reply_ok();
+                },
             }
+        };
+    }
+}
+
+#[cfg(not(any(target_os = "stax", target_os = "flex")))]
+fn validate(    message:&[&str],
+
+                sub_message: &[&str],
+
+                confirm: &[&str],
+
+                cancel: &[&str]) -> bool
+{
+    return MessageValidator::new(
+        message,
+        confirm,
+        cancel,
+    )
+        .ask()
+}
+
+
+#[cfg(any(target_os = "stax", target_os = "flex"))]
+fn validate(    message:&[&str], 
+
+                sub_message: &[&str],
+
+                confirm: &[&str],
+
+                cancel: &[&str]) -> bool
+{
+
+
+    let success = NbglChoice::new().show(
+        message.first().unwrap_or(&""),
+        sub_message.first().unwrap_or(&""),
+        confirm.first().unwrap_or(&""),
+        cancel.first().unwrap_or(&""),
+    );
+
+    if success {
+        return true;
+    } else {
+        return false;
+    }
+
+
+
+//    NbglReview::<>::new()
+//        .titles(confirm.first().unwrap_or(&""), "", message.first().unwrap_or(&"") )
+//        .show(&[my_fields[0]])
+}
+
+
+#[cfg(not(any(target_os = "stax", target_os = "flex")))]
+fn display_screensaver(c: i32, lfsr: &mut Lfsr) {
+    let y_offset = ((SCREEN_HEIGHT as i32) / 2) - 16;
+    if c == 0 {
+        bagls::RectFull::new()
+            .pos(0, y_offset)
+            .width(8)
+            .height(8)
+            .erase();
+        SingleMessage::new("NanoPass").show();
+        *lfsr = Lfsr::new(u8::random() & 0x3f, 0x30);
+    } else if c == 128 {
+        bagls::RectFull::new()
+            .pos(1, y_offset + 1)
+            .width(7)
+            .height(7)
+            .display();
+    } else if c >= 64 {
+        let pos = lfsr.next();
+        let (x, y) = ((pos & 15) * 8, (pos >> 4) * 8);
+        bagls::RectFull::new()
+            .pos(x.into(), (y_offset + y as i32).into())
+            .width(8)
+            .height(8)
+            .height(8)
+            .erase();
+        let rect = bagls::RectFull::new()
+            .pos((x + 1).into(), (y_offset + y as i32 + 1).into())
+            .width(7)
+            .height(7);
+        if c > 128 {
+            rect.erase();
+        } else {
+            rect.display();
         }
     }
+
+}
+
+#[cfg(any(target_os = "stax", target_os = "flex"))]
+fn display_screensaver(c: i32, lfsr: &mut Lfsr) {
 }
 
 /// Conversion to a two-digit number
@@ -415,20 +506,41 @@ fn int2dec(x: usize) -> [u8; 2] {
 /// Display global information about the app:
 /// - Current number of passwords stored
 /// - App Version
-fn display_infos(passwords: &nvm::Collection<PasswordItem, 128>) {
-    let mut stored_n = *b"   passwords";
-    let pwlen_bytes = int2dec(passwords.len());
+/// 
+#[cfg(not(any(target_os = "stax", target_os = "flex")))]
+fn display_infos(comm: &mut io::Comm) -> io::Event<Instruction>  {
+    const APP_ICON: Glyph = Glyph::from_include(include_gif!("crab.gif"));
+    let pages = [
+        // The from trait allows to create different styles of pages
+        // without having to use the new() function.
+        &Page::from((["NanoPass", "is ready"], &APP_ICON)),
+        &Page::from((["Version", env!("CARGO_PKG_VERSION")], true)),
+        &Page::from(("Quit", &DASHBOARD_X)),
+    ];
+    loop {
+        match MultiPageMenu::new(comm, &pages).show() {
+            EventOrPageIndex::Event(e) => return e,
+            EventOrPageIndex::Index(3) => ledger_device_sdk::exit_app(0),
+            EventOrPageIndex::Index(_) => (),
+        }
+    }
+}
 
-    stored_n[0] = pwlen_bytes[0];
-    stored_n[1] = pwlen_bytes[1];
+#[cfg(any(target_os = "stax", target_os = "flex"))]
+pub fn display_infos(_: &mut Comm) -> Event<Instruction> {
+    // Load glyph from 64x64 4bpp gif file with include_gif macro. Creates an NBGL compatible glyph.
+    const FERRIS: NbglGlyph = NbglGlyph::from_include(include_gif!("key_16x16.gif", NBGL));
 
-    // safety: int2dec returns a [u8; 2] consisting of values between
-    // '0' and '9', thus is valid utf8
-    let stored_str = unsafe { core::str::from_utf8_unchecked(&stored_n) };
+    // Display the home screen.
 
-    const APP_VERSION_STR: &str = concat!(env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
-
-    ui::Menu::new(&[APP_VERSION_STR, stored_str]).show();
+    NbglHomeAndSettings::new()
+        .glyph(&FERRIS)
+        .infos(
+            "NanoPass",
+            env!("CARGO_PKG_VERSION"),
+            env!("CARGO_PKG_AUTHORS"),
+        )
+        .show()
 }
 
 /// Generates a random password.
@@ -438,7 +550,6 @@ fn display_infos(passwords: &nvm::Collection<PasswordItem, 128>) {
 /// * `dest` - An array where the result is stored. Must be at least
 ///   `size` long. No terminal zero is written.
 /// * `size` - The size of the password to be generated
-use random::Random;
 fn generate_random_password(dest: &mut [u8], size: usize) {
     for item in dest.iter_mut().take(size) {
         let rand_index = u32::random_from_range(0..PASS_CHARS.len() as u32);
@@ -477,12 +588,13 @@ fn set_password(
     return match passwords.into_iter().position(|x| x.name == *name) {
         Some(index) => {
             // A password with this name already exists.
-            if !ui::MessageValidator::new(&[name.as_str()], &[&"Update", &"password"], &[&"Cancel"])
-                .ask()
+            if !validate(&[name.as_str()], &[&"Update password"], &[&"Confirm"], &[&"Cancel"])
             {
+                NbglStatus::new().text("Operation rejected").show(false);
                 return Err(Error::NoConsent);
             }
             passwords.remove(index);
+            NbglStatus::new().text("").show(true);
             match passwords.add(&new_item) {
                 Ok(()) => Ok(()),
                 // We just removed a password, this should not happen
@@ -491,11 +603,12 @@ fn set_password(
         }
         None => {
             // Ask user confirmation
-            if !ui::MessageValidator::new(&[name.as_str()], &[&"Create", &"password"], &[&"Cancel"])
-                .ask()
+            if !validate(&[name.as_str()], &[&"Create password"], &[&"Confirm"], &[&"Cancel"])
             {
+                NbglStatus::new().text("Operation rejected").show(false);
                 return Err(Error::NoConsent);
             }
+            NbglStatus::new().text("").show(true);
             match passwords.add(&new_item) {
                 Ok(()) => Ok(()),
                 Err(nvm::StorageFullError) => Err(Error::StorageFull),
@@ -515,7 +628,7 @@ fn export(
     enc_key: Option<&[u8; 32]>,
 ) {
     // Ask user confirmation
-    if !ui::MessageValidator::new(&[], &[&"Export", &"passwords"], &[&"Cancel"]).ask() {
+    if !validate(&[], &[&"Export passwords"], &[&"Confirm"], &[&"Cancel"]) {
         comm.reply(Error::NoConsent);
         return;
     }
@@ -523,7 +636,7 @@ fn export(
     // If export is in plaintext, add a warning
     let encrypted = enc_key.is_some();
     if !encrypted
-        && !ui::MessageValidator::new(&[&"Export is plaintext!"], &[&"Confirm"], &[&"Cancel"]).ask()
+        && !validate(&[], &[&"Export is plaintext!"], &[&"Confirm"], &[&"Cancel"])
     {
         comm.reply(Error::NoConsent);
         return;
@@ -536,7 +649,7 @@ fn export(
 
     // We are now waiting for N APDUs to retrieve all passwords.
     // If encryption is enabled, the IV is returned during the first iteration.
-    ui::SingleMessage::new("Exporting...").show();
+    show_message("Exporting...");
 
     let mut iter = passwords.into_iter();
     let mut next_item = iter.next();
@@ -548,7 +661,7 @@ fn export(
                 // If encryption is enabled, encrypt the buffer inplace.
                 if encrypted {
                     let mut nonce = [0u8; 16];
-                    random::rand_bytes(&mut nonce);
+                    rand_bytes(&mut nonce);
                     comm.append(&nonce);
                     let mut buffer: Vec<u8, 96> = Vec::new();
                     buffer.extend_from_slice(password.name.bytes()).unwrap();
@@ -618,14 +731,14 @@ fn import(
     count_bytes.copy_from_slice(comm.get(5, 5 + 4));
     let mut count = u32::from_be_bytes(count_bytes);
     // Ask user confirmation
-    if !ui::MessageValidator::new(&[], &[&"Import", &"passwords"], &[&"Cancel"]).ask() {
+    if !validate(&[], &[&"Import passwords"], &[&"Confirm"], &[&"Cancel"]) {
         comm.reply(Error::NoConsent);
         return;
     } else {
         comm.reply_ok();
     }
     // Wait for all items
-    ui::SingleMessage::new("Importing...").show();
+    show_message("Importing...");
     while count > 0 {
         match comm.next_command() {
             // Fetch next password
@@ -704,4 +817,26 @@ fn import(
             }
         }
     }
+
+}
+
+#[cfg(not(any(target_os = "stax", target_os = "flex")))]
+fn show_message(msg: &str) {
+    SingleMessage::new(&msg).show()
+}
+
+
+#[cfg(any(target_os = "stax", target_os = "flex"))]
+fn show_message(msg: &str) {
+    NbglSpinner::new().text(msg).show();
+}
+
+#[cfg(any(target_os = "stax", target_os = "flex"))]
+fn popup(msg: &str) {
+    let _info = NbglChoice::new().show(
+        msg,
+        "",
+        "Ok",
+        ""
+    );
 }

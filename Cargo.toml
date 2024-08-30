@@ -3,27 +3,43 @@ name = "nanopass"
 version = "1.2.1"
 authors = ["yhql", "Olivier Hériveaux"]
 edition = "2021"
-build = "build.rs"
 
 [build-dependencies]
 cc = "1.0.73"
 bindgen = "0.59.2"
 
 [dependencies]
-nanos_sdk = { git = "https://github.com/LedgerHQ/ledger-nanos-sdk.git" }
-nanos_ui = { git = "https://github.com/LedgerHQ/ledger-nanos-ui.git" }
+ledger_device_sdk = { version="1.14.0" }
+ledger_secure_sdk_sys = { version = "1.4.4" }
+include_gif = "1.2.0"
 cty = "0.2.0"
 heapless = { version = "0.7.16", default-features = false }
 
 [profile.release]
-opt-level = 's' 
+opt-level = 'z'
 lto = true
 
-[package.metadata.nanos]
-api_level = "1"
-name = "NanoPass"
+[features]
+default = ["pending_review_screen"]
+pending_review_screen = []
+
+[package.metadata.ledger]
 curve = ["secp256k1"]
 flags = "0"
-icon = "key_16x16.gif"
-icon_small = "key_14x14.gif"
-path = [""]
+path = ["10016'"]
+name = "NanoPass"
+
+[package.metadata.ledger.nanos]
+icon = "crab.gif"
+
+[package.metadata.ledger.nanox]
+icon = "key_14x14.gif"
+
+[package.metadata.ledger.nanosplus]
+icon = "key_14x14.gif"
+
+[package.metadata.ledger.stax]
+icon = "crab_32x32.gif"
+
+[package.metadata.ledger.flex]
+icon = "crab_40x40.gif"
