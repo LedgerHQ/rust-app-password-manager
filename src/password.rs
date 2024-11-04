@@ -99,7 +99,7 @@ impl<const N: usize> Eq for ArrayString<N> {}
 /// with zeros. This is not null terminated, and UTF8 is allowed.
 #[derive(Clone, Copy)]
 pub struct PasswordItem {
-    pub name: ArrayString<32>,
+    pub name: ArrayString<64>,
     pub login: ArrayString<32>,
     pub pass: ArrayString<32>,
 }

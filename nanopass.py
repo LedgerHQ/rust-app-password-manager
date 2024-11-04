@@ -22,7 +22,7 @@ import json
 from typing import Optional, List, Tuple
 import ledgerwallet.client
 
-MAX_NAME_LEN = 32
+MAX_NAME_LEN = 64
 MAX_LOGIN_LEN = 32
 MAX_PASS_LEN = 32
 
@@ -110,19 +110,16 @@ class Client:
         self.dev.apdu_exchange(0x03, p1=p1, data=name_bytes + login_bytes +
             password_bytes)
 
-    def get_name(self, index: int) -> str:
-        """
-        Retrieve name of a password
-        :param index: Password entry index
-        :return: Name
-        """
-        r = self.dev.apdu_exchange(0x04, index.to_bytes(4, 'big'))
-        assert len(r) == 32
-        return bytes_to_str(r)
-
     def get_names(self) -> List[str]:
         """ :return: List of password names """
-        return [self.get_name(i) for i in range(self.get_size())]
+        names = []
+        for i in range(0, self.get_size(), 4):
+            r = self.dev.apdu_exchange(0x04, i.to_bytes(4, 'big'))
+            for j in range(4):
+                name = bytes_to_str(r[j*64:j*64+64])
+                if len(name) > 0:
+                    names.append(name)
+        return names
 
     def get_by_name(self, name: str) -> Tuple[str, str]:
         """
@@ -211,6 +208,9 @@ class Client:
         assert len(res) == 1
         assert res[0] in (0, 1)
         return bool(res[0])
+    
+    def list_password_on_screen(self):
+        self.dev.apdu_exchange(0x0f)
 
 
 @click.group()
@@ -317,7 +317,8 @@ def open_(ctx):
 @click.pass_context
 def quit(ctx):
     dev = ctx.obj['DEV']
-    dev.quit_app()
+    # dev.quit_app()
+    dev.list_password_on_screen()
 
 
 if __name__ == '__main__':
